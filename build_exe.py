@@ -8,6 +8,13 @@ import os
 import sys
 from pathlib import Path
 
+# Force UTF-8-friendly console on CI to avoid UnicodeEncodeError
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 def build_executable():
     """Build the executable using PyInstaller"""
     
