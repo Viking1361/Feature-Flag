@@ -33,11 +33,6 @@ jobs:
         pip install pyinstaller
         pip install -r requirements.txt
 
-    - name: Show build_exe print line
-      shell: bash
-      run: |
-        sed -n '60,85p' build_exe.py
-        
     - name: Build executable
       run: |
         python build_exe.py
