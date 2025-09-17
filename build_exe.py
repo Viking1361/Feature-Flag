@@ -71,13 +71,13 @@ def build_executable():
     # Run PyInstaller
     PyInstaller.__main__.run(args)
     
-    print("\n✅ Build completed!")
+    print("\nBuild completed!")
     print(f"Executable location: {current_dir / 'dist' / 'FeatureFlagManager.exe'}")
     print("\nAuto-update features included:")
-    print("• Automatic version checking on startup")
-    print("• Manual update check via Help menu")
-    print("• Background download and installation")
-    print("• Version skipping and reminder options")
+    print("- Automatic version checking on startup")
+    print("- Manual update check via Help menu")
+    print("- Background download and installation")
+    print("- Version skipping and reminder options")
 
 def create_version_info():
     """Create version info file for Windows executable"""
@@ -108,7 +108,7 @@ VSVersionInfo(
         StringStruct(u'FileDescription', u'Feature Flag Management System'),
         StringStruct(u'FileVersion', u'{__version__}'),
         StringStruct(u'InternalName', u'FeatureFlagManager'),
-        StringStruct(u'LegalCopyright', u'© 2024 Feature Flag Management System'),
+        StringStruct(u'LegalCopyright', u' 2024 Feature Flag Management System'),
         StringStruct(u'OriginalFilename', u'FeatureFlagManager.exe'),
         StringStruct(u'ProductName', u'Feature Flag Manager'),
         StringStruct(u'ProductVersion', u'{__version__}')])
