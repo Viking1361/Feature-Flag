@@ -2,13 +2,28 @@ import requests
 import logging
 from api_config.api_endpoints import FeatureFlagEndpoints, APIHeaders, APIConfig, URLBuilder, LAUNCHDARKLY_BASE_URL
 from shared.constants import ENVIRONMENT_MAPPINGS
+from shared.config_loader import LOG_FILE
 
 # Configure logging
 logging.basicConfig(
-    filename='feature_flag.log',
+    filename=LOG_FILE,
     level=logging.INFO,
-    format='%(asctime)s:%(levelname)s:%(message)s'
+    format='%(asctime)s:%(levelname)s:%(message)s',
+    encoding='utf-8',
+    force=True
 )
+
+def _sanitize_headers(headers: dict) -> dict:
+    """Redact sensitive headers before logging."""
+    try:
+        safe = dict(headers) if headers else {}
+        for k in list(safe.keys()):
+            lk = k.lower()
+            if lk in ("authorization", "cookie", "set-cookie"):
+                safe[k] = "***REDACTED***"
+        return safe
+    except Exception:
+        return {"info": "unavailable"}
 
 def get_authentication_token(parsed_url, query_params, pmc_id, site_id):
     auth_url = f"{parsed_url.scheme}://{parsed_url.netloc}/api/core/authentication/login"
@@ -54,7 +69,7 @@ def get_feature_flag_data(parsed_url, feature_flag_key, auth_token, app_context)
     return None
 
 def update_flag(env_key, feature_key, update_value):
-    from config import LAUNCHDARKLY_API_KEY, PROJECT_KEY
+    from shared.config_loader import LAUNCHDARKLY_API_KEY, PROJECT_KEY
     from shared.user_session import get_api_comment
 
     api_key = LAUNCHDARKLY_API_KEY
@@ -79,10 +94,10 @@ def update_flag(env_key, feature_key, update_value):
         ]
     }
     
-    # Debug logging for request details
-    logging.info(f"DEBUG: Request URL: {url}")
-    logging.info(f"DEBUG: Request Headers: {headers}")
-    logging.info(f"DEBUG: Request Payload: {payload}")
+    # Debug logging for request details (redacted & at DEBUG level)
+    logging.debug(f"Request URL: {url}")
+    logging.debug(f"Request Headers: {_sanitize_headers(headers)}")
+    logging.debug(f"Request Payload: {payload}")
     print(f"DEBUG: Request URL: {url}")
     print(f"DEBUG: Request Headers: {headers}")
     print(f"DEBUG: Request Payload: {payload}")
@@ -96,10 +111,10 @@ def update_flag(env_key, feature_key, update_value):
                 timeout=APIConfig.DEFAULT_TIMEOUT
             )
             
-            # Debug logging for response
-            logging.info(f"DEBUG: Response Status: {ld_response.status_code}")
-            logging.info(f"DEBUG: Response Headers: {dict(ld_response.headers)}")
-            logging.info(f"DEBUG: Response Body: {ld_response.text}")
+            # Debug logging for response (at DEBUG level; redact cookies if present)
+            logging.debug(f"Response Status: {ld_response.status_code}")
+            logging.debug(f"Response Headers: {_sanitize_headers(dict(ld_response.headers))}")
+            logging.debug(f"Response Body: {ld_response.text}")
             print(f"DEBUG: Response Status: {ld_response.status_code}")
             print(f"DEBUG: Response Headers: {dict(ld_response.headers)}")
             print(f"DEBUG: Response Body: {ld_response.text}")
@@ -120,7 +135,7 @@ def update_flag(env_key, feature_key, update_value):
 
 def get_environments():
     """Get available environments from LaunchDarkly project"""
-    from config import LAUNCHDARKLY_API_KEY, PROJECT_KEY
+    from shared.config_loader import LAUNCHDARKLY_API_KEY, PROJECT_KEY
     api_key = LAUNCHDARKLY_API_KEY
     project_key = PROJECT_KEY
     headers = APIHeaders.get_launchdarkly_headers(api_key)
@@ -147,7 +162,7 @@ def get_environments():
         return []
 
 def get_all_feature_flags():
-    from config import LAUNCHDARKLY_API_KEY, PROJECT_KEY
+    from shared.config_loader import LAUNCHDARKLY_API_KEY, PROJECT_KEY
     api_key = LAUNCHDARKLY_API_KEY
     project_key = PROJECT_KEY
     headers = APIHeaders.get_launchdarkly_headers(api_key)

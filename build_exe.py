@@ -7,6 +7,7 @@ import PyInstaller.__main__
 import os
 import sys
 from pathlib import Path
+import shutil
 
 # Force UTF-8-friendly console on CI to avoid UnicodeEncodeError
 try:
@@ -51,6 +52,7 @@ def build_executable():
         '--hidden-import=subprocess',
         '--hidden-import=tempfile',
         '--hidden-import=pathlib',
+        '--hidden-import=shared.config_loader',
         
         # Include data files
         '--add-data=ui;ui',
@@ -85,6 +87,17 @@ def build_executable():
     print("- Manual update check via Help menu")
     print("- Background download and installation")
     print("- Version skipping and reminder options")
+
+    # For local testing convenience: copy config.py next to the EXE if it exists locally.
+    # Note: CI typically won't have a config.py (it's gitignored), so this is mainly for devs.
+    try:
+        local_cfg = current_dir / "config.py"
+        if local_cfg.exists():
+            dest_cfg = current_dir / "dist" / "config.py"
+            shutil.copy2(local_cfg, dest_cfg)
+            print(f"Copied local config.py to: {dest_cfg}")
+    except Exception as e:
+        print(f"Warning: could not copy config.py to dist: {e}")
 
 def create_version_info():
     """Create version info file for Windows executable"""

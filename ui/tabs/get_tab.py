@@ -3,7 +3,7 @@ import ttkbootstrap as ttk
 from tkinter import messagebox
 import logging
 import requests
-from config import LAUNCHDARKLY_API_KEY, PROJECT_KEY
+from shared.config_loader import LAUNCHDARKLY_API_KEY, PROJECT_KEY, LOG_FILE
 from api_config.api_endpoints import LAUNCHDARKLY_BASE_URL
 from shared.constants import ENVIRONMENT_MAPPINGS
 try:
@@ -368,6 +368,21 @@ class GetTab:
             
             if flag_data:
                 self.display_flag_status(flag_data)
+                # Ensure logging is configured (fallback to file if no handlers)
+                if not logging.getLogger().handlers:
+                    try:
+                        logging.basicConfig(
+                            filename=LOG_FILE,
+                            level=logging.INFO,
+                            format='%(asctime)s:%(levelname)s:%(message)s',
+                            encoding='utf-8'
+                        )
+                    except Exception:
+                        pass
+                # Minimal ASCII-only success audit log (no sensitive data)
+                enabled_val = bool(flag_data.get("enabled", False))
+                actual_env = flag_data.get("actual_environment", environment)
+                logging.info(f"Get success: key={feature_key} env={actual_env} enabled={enabled_val}")
             else:
                 self.status_var.set("❌ Failed to retrieve flag status")
                 self.response_text.config(state="normal")

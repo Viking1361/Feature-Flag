@@ -1,6 +1,6 @@
 import json
 import os
-from config import HISTORY_FILE
+from shared.config_loader import HISTORY_FILE
 
 class HistoryManager:
     def __init__(self):

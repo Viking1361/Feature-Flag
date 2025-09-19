@@ -6,7 +6,7 @@ import requests
 import json
 from datetime import datetime
 from app_logic import update_flag
-from config import LOG_FILE, LAUNCHDARKLY_API_KEY, PROJECT_KEY
+from shared.config_loader import LOG_FILE, LAUNCHDARKLY_API_KEY, PROJECT_KEY
 from api_config.api_endpoints import FeatureFlagEndpoints, APIHeaders, APIConfig, URLBuilder
 from shared.constants import UPDATE_ENVIRONMENT_OPTIONS, ENVIRONMENT_MAPPINGS
 from api_client import get_client
@@ -446,6 +446,14 @@ class UpdateTab:
                 
                 print(f"DEBUG: SUCCESS - {success_message}{context_display}")
                 print(f"DEBUG: Details - {message}")
+                # Minimal ASCII-only success audit log (no sensitive data)
+                try:
+                    action = "on" if enable else "off"
+                    safe_pmc = pmcid if pmcid else "-"
+                    safe_site = siteid if siteid else "-"
+                    logging.info(f"Update success: key={feature_key} env={environment} action={action} pmc={safe_pmc} site={safe_site}")
+                except Exception:
+                    pass
                 
             else:
                 error_message = f"❌ Failed to update {feature_key}"

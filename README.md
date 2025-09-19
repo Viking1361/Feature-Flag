@@ -7,7 +7,8 @@ A professional, modular Python application for managing LaunchDarkly feature fla
 ```
 FeatureFlag/
 ├── main.py                    # 🎯 Main application entry point
-├── config.py                  # ⚙️ Configuration settings
+├── shared/config_loader.py    # ⚙️ Centralized configuration loader (env vars, optional config.json)
+├── config.example.json        # 🧩 Example JSON config (copy to config.json and fill in values)
 ├── app_logic.py              # 🔧 Business logic functions
 ├── ui/                       # 🎨 User Interface Package
 │   ├── __init__.py
@@ -67,11 +68,31 @@ pip install ttkbootstrap requests
 ```
 
 ### Configuration
-Update `config.py` with your LaunchDarkly credentials:
-```python
-LAUNCHDARKLY_API_KEY = "your-api-key"
-PROJECT_KEY = "your-project-key"
-```
+You can configure credentials via environment variables or an optional `config.json` file.
+
+- Environment variables (recommended):
+  - `LAUNCHDARKLY_API_KEY`
+  - `PROJECT_KEY`
+  - `LOG_FILE` (optional, default: `feature_flag.log`)
+  - `HISTORY_FILE` (optional, default: `autocomplete_history.json`)
+  - `GITHUB_TOKEN` (optional, only needed if your GitHub repo is private for updates)
+
+- Optional `config.json` (placed next to the EXE, current working directory, or project root):
+  ```json
+  {
+    "LAUNCHDARKLY_API_KEY": "your-api-key",
+    "PROJECT_KEY": "your-project-key",
+    "LOG_FILE": "feature_flag.log",
+    "HISTORY_FILE": "autocomplete_history.json",
+    "GITHUB_TOKEN": "your-github-token-if-using-private-releases"
+  }
+  ```
+
+Configuration loading is centralized in `shared/config_loader.py` with the following precedence:
+1) Environment variables
+2) Optional `config.py` if present (not required)
+3) `config.json` found next to the EXE, in the CWD, or project root
+4) Sensible defaults
 
 ### Running the Application
 ```bash
@@ -152,11 +173,11 @@ python main.py
 
 ### **API Configuration**
 ```python
-# config.py
-LAUNCHDARKLY_API_KEY = "your-api-key"
-PROJECT_KEY = "your-project-key"
-HISTORY_FILE = "autocomplete_history.json"
-LOG_FILE = "feature_flag.log"
+# config.json (optional)
+{
+  "LAUNCHDARKLY_API_KEY": "your-api-key",
+  "PROJECT_KEY": "your-project-key"
+}
 ```
 
 ### **Theme Configuration**
@@ -260,7 +281,7 @@ THEMES = {
 
 ## 📝 License
 
-© 2024 Feature Flag Management System
+ 2024 Feature Flag Management System
 
 ## 🤝 Contributing
 
@@ -314,11 +335,16 @@ Download the latest executable from [Releases](https://github.com/YOUR-USERNAME/
    GITHUB_REPO = "feature-flag-manager"  # Your repository name
    ```
 
-2. **Configure LaunchDarkly credentials** in `config.py`:
-   ```python
-   LAUNCHDARKLY_API_KEY = "your-api-key"
-   PROJECT_KEY = "your-project-key"
-   ```
+2. **Configure LaunchDarkly credentials** via environment variables or `config.json`:
+   - Environment variables:
+     - `LAUNCHDARKLY_API_KEY`, `PROJECT_KEY`
+   - Or create `config.json` (copy `config.example.json` and fill values):
+     ```json
+     {
+       "LAUNCHDARKLY_API_KEY": "your-api-key",
+       "PROJECT_KEY": "your-project-key"
+     }
+     ```
 
 ## 🚀 GitHub Integration Setup
 
@@ -365,6 +391,24 @@ The application includes a sophisticated auto-update system:
 - **Semantic versioning** support (1.0.0 → 1.0.1)
 - **Background downloads** with progress tracking
 - **Seamless installation** process
+
+### Private GitHub Releases
+If your repository is private, the updater needs a token to check and download releases:
+
+- Set `GITHUB_TOKEN` via environment variable or include it in `config.json` (do not commit this file):
+  - PowerShell (current session):
+    ```powershell
+    $env:GITHUB_TOKEN = "<your-token-with-repo-read>"
+    ```
+  - Or `config.json`:
+    ```json
+    { "GITHUB_TOKEN": "<your-token-with-repo-read>" }
+    ```
+- Token scopes:
+  - Classic token: `repo` scope
+  - Fine-grained: grant read access to the target repository (including Releases/assets)
+
+The app will add `Authorization: token <GITHUB_TOKEN>` to GitHub API calls and use the asset API URL with `Accept: application/octet-stream` for downloads.
 
 ## 📁 Project Structure
 

@@ -13,7 +13,7 @@ import json
 import webbrowser
 from datetime import datetime, timedelta
 from api_client import get_client
-from config import PROJECT_KEY
+from shared.config_loader import PROJECT_KEY
 from utils.settings_manager import SettingsManager
 
 class ToastNotification:

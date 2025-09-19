@@ -1,0 +1,7 @@
+{
+  "LAUNCHDARKLY_API_KEY": "your-api-key-here",
+  "PROJECT_KEY": "your-project-key-here",
+  "LOG_FILE": "feature_flag.log",
+  "HISTORY_FILE": "autocomplete_history.json",
+  "GITHUB_TOKEN": "your-github-token-if-using-private-releases"
+}

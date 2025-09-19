@@ -16,7 +16,7 @@ from requests.adapters import HTTPAdapter
 from functools import wraps
 from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass
-from config import LAUNCHDARKLY_API_KEY, PROJECT_KEY
+from shared.config_loader import LAUNCHDARKLY_API_KEY, PROJECT_KEY
 from api_config.api_endpoints import LAUNCHDARKLY_BASE_URL, APIConfig
 
 @dataclass

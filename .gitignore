@@ -130,6 +130,8 @@ dmypy.json
 
 # Project specific
 config.py
+config.json
+feature_flag_config.json
 *.log
 logs/
 temp/

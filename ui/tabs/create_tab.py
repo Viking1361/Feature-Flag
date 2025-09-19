@@ -6,7 +6,7 @@ import json
 import logging
 import traceback
 from datetime import datetime
-from config import LAUNCHDARKLY_API_KEY, PROJECT_KEY
+from shared.config_loader import LAUNCHDARKLY_API_KEY, PROJECT_KEY
 from api_config.api_endpoints import FeatureFlagEndpoints, APIHeaders, APIConfig
 from shared.constants import UPDATE_ENVIRONMENT_OPTIONS
 

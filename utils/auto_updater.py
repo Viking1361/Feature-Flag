@@ -18,6 +18,7 @@ from tkinter import messagebox
 import logging
 
 from version import __version__, UPDATE_CHECK_URL, UPDATE_DOWNLOAD_URL, UPDATE_CHECK_INTERVAL
+from shared.config_loader import GITHUB_TOKEN
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,10 @@ class AutoUpdater:
             self.save_settings()
             
             # Make API request to check latest version
-            response = requests.get(UPDATE_CHECK_URL, timeout=10)
+            headers = {"Accept": "application/vnd.github+json"}
+            if GITHUB_TOKEN:
+                headers["Authorization"] = f"token {GITHUB_TOKEN}"
+            response = requests.get(UPDATE_CHECK_URL, headers=headers, timeout=10)
             response.raise_for_status()
             
             release_data = response.json()
@@ -129,9 +133,15 @@ class AutoUpdater:
                 
                 # Find download URL for Windows executable
                 download_url = None
+                selected_asset = None
                 for asset in release_data.get("assets", []):
                     if asset.get("name", "").endswith(".exe"):
-                        download_url = asset.get("browser_download_url")
+                        selected_asset = asset
+                        # For private repos, use the API asset URL with auth
+                        if GITHUB_TOKEN:
+                            download_url = asset.get("url")  # API URL for asset
+                        else:
+                            download_url = asset.get("browser_download_url")
                         break
                 
                 if not download_url:
@@ -143,8 +153,9 @@ class AutoUpdater:
                     "download_url": download_url,
                     "release_notes": release_data.get("body", ""),
                     "published_at": release_data.get("published_at", ""),
-                    "size": next((asset.get("size", 0) for asset in release_data.get("assets", []) 
-                                if asset.get("name", "").endswith(".exe")), 0)
+                    "size": (selected_asset.get("size", 0) if selected_asset else 0),
+                    # When using a private repo with token, we download via the API asset URL
+                    "use_api_asset": bool(GITHUB_TOKEN)
                 }
                 
                 self.update_available = True
@@ -342,7 +353,13 @@ class AutoUpdater:
                 progress_label.pack()
                 
                 # Download file
-                response = requests.get(version_info["download_url"], stream=True)
+                req_headers = {}
+                if version_info.get("use_api_asset"):
+                    # GitHub API asset download for private repos
+                    req_headers["Accept"] = "application/octet-stream"
+                    if GITHUB_TOKEN:
+                        req_headers["Authorization"] = f"token {GITHUB_TOKEN}"
+                response = requests.get(version_info["download_url"], stream=True, headers=req_headers)
                 response.raise_for_status()
                 
                 total_size = int(response.headers.get('content-length', 0))

@@ -2,6 +2,10 @@ import tkinter as tk
 import ttkbootstrap as ttk
 from tkinter import messagebox
 import os
+import webbrowser
+
+from version import get_version_info, GITHUB_OWNER, GITHUB_REPO
+from utils.auto_updater import get_updater
 
 # Import utility managers
 from utils.theme_manager import ThemeManager
@@ -93,6 +97,16 @@ class FeatureFlagApp:
         # Logout button on the right
         logout_button = ttk.Button(top_frame, text="Logout", command=self.logout, bootstyle="danger")
         logout_button.pack(side="right")
+
+        # Help menu (to the left of Logout)
+        help_btn = ttk.Menubutton(top_frame, text="Help", bootstyle="secondary")
+        help_menu = tk.Menu(help_btn, tearoff=0)
+        help_menu.add_command(label="Check for Updates", command=lambda: get_updater(self.root).manual_check_for_updates())
+        help_menu.add_command(label="Documentation", command=self.open_documentation)
+        help_menu.add_separator()
+        help_menu.add_command(label="About", command=self.show_about_dialog)
+        help_btn["menu"] = help_menu
+        help_btn.pack(side="right", padx=(0, 10))
 
         # Main container frame
         main_frame = ttk.Frame(self.root)
@@ -314,6 +328,29 @@ class FeatureFlagApp:
             print(f"DEBUG: Widget destroyed during session update: {e}")
         except Exception as e:
             print(f"DEBUG: Error updating session info: {e}")
+    
+    # --- Help menu handlers ---
+    def open_documentation(self):
+        """Open project documentation (README) in the default browser"""
+        try:
+            url = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}#readme"
+            webbrowser.open(url)
+        except Exception as e:
+            messagebox.showinfo("Help", f"Open documentation at: https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}\nError: {e}")
+
+    def show_about_dialog(self):
+        """Show About dialog with version details"""
+        try:
+            info = get_version_info()
+            msg = (
+                "Feature Flag Manager\n"
+                f"Version: {info.get('version', '')}\n"
+                f"Build Date: {info.get('build_date', '')}\n"
+                f"Author: {info.get('author', '')}"
+            )
+            messagebox.showinfo("About", msg)
+        except Exception as e:
+            messagebox.showerror("About", f"Unable to load version info: {e}")
     
     def logout(self):
         """Logout and return to login screen with session cleanup"""
