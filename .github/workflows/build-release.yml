@@ -1,55 +1,80 @@
-name: Build and Release
+name: Build and Release (Windows)
 
 on:
   push:
     tags:
-      - 'v*'  # Triggers on version tags like v1.0.0, v1.0.1, etc.
-  workflow_dispatch:  # Allows manual trigger
+      - "v*"
+  workflow_dispatch:
+
+# REQUIRED so the built-in GITHUB_TOKEN can create releases and upload assets
+permissions:
+  contents: write
 
 jobs:
   build-windows:
     runs-on: windows-latest
-    env:
-      PYTHONUTF8: '1'
-      PYTHONIOENCODING: 'utf-8'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Force UTF-8 code page (Windows)
-      shell: cmd
-      run: |
-        chcp 65001 >NUL
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install -r requirements.txt
 
-    - name: Build executable
-      run: |
-        python build_exe.py
-        
-    - name: Upload executable as artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: FeatureFlagManager-Windows
-        path: dist/FeatureFlagManager.exe
-        
-    - name: Create Release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: dist/FeatureFlagManager.exe
-        generate_release_notes: true
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Optional, keeps console output UTF-8 friendly
+      - name: Set code page to UTF-8
+        shell: pwsh
+        run: chcp 65001
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+
+      # OPTIONAL: Embed internal config into the EXE at build time (internal-only)
+      # If you want this, create repo secrets: LD_API_KEY, PROJECT_KEY, GH_TOKEN_APP (PAT for updater)
+      # Remove this step if you don't want to embed secrets in the binary.
+      - name: Write config.json (internal build)
+        if: ${{ secrets.LD_API_KEY != '' && secrets.PROJECT_KEY != '' }}
+        shell: pwsh
+        run: |
+          $obj = [ordered]@{
+            LAUNCHDARKLY_API_KEY = "${{ secrets.LD_API_KEY }}"
+            PROJECT_KEY          = "${{ secrets.PROJECT_KEY }}"
+            GITHUB_TOKEN         = "${{ secrets.GH_TOKEN_APP }}"
+            LOG_FILE             = "feature_flag.log"
+            HISTORY_FILE         = "autocomplete_history.json"
+          }
+          $json = ($obj | ConvertTo-Json -Compress)
+          Set-Content -Path config.json -Value $json -Encoding UTF8
+
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          if (Test-Path config.json) {
+            .\build.ps1 -EmbedConfig -ConfigPath ".\config.json" -Clean
+          } else {
+            py build_exe.py
+          }
+
+      - name: Upload artifact (for debugging)
+        uses: actions/upload-artifact@v4
+        with:
+          name: FeatureFlagManager
+          path: dist/FeatureFlagManager.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Feature Flag Manager ${{ github.ref_name }}"
+          body: "Automated build for ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          files: |
+            dist/FeatureFlagManager.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # built-in token
