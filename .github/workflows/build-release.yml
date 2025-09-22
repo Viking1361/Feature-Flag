@@ -34,11 +34,17 @@ jobs:
           python -m pip install -U pip
           pip install -r requirements.txt
 
-      # OPTIONAL: Embed internal config into the EXE at build time (internal-only)
-      # If you want this, create repo secrets: LD_API_KEY, PROJECT_KEY, GH_TOKEN_APP (PAT for updater)
-      # Remove this step if you don't want to embed secrets in the binary.
+      # Validate secrets needed for embedding (fail fast if missing)
+      - name: Validate embedding secrets
+        shell: pwsh
+        run: |
+          if (-not "${{ secrets.LD_API_KEY }}") { throw "Missing secret: LD_API_KEY" }
+          if (-not "${{ secrets.PROJECT_KEY }}") { throw "Missing secret: PROJECT_KEY" }
+          # Optional PAT for private repo updater. If empty, updater will work for public repos only.
+          if (-not "${{ secrets.GH_TOKEN_APP }}") { Write-Host "[WARN] GH_TOKEN_APP not set (private repo updater downloads will fail)" }
+
+      # Always embed internal config into the EXE at build time (internal-only)
       - name: Write config.json (internal build)
-        if: ${{ secrets.LD_API_KEY != '' && secrets.PROJECT_KEY != '' }}
         shell: pwsh
         run: |
           $obj = [ordered]@{
@@ -54,11 +60,14 @@ jobs:
       - name: Build EXE
         shell: pwsh
         run: |
-          if (Test-Path config.json) {
-            .\build.ps1 -EmbedConfig -ConfigPath ".\config.json" -Clean
-          } else {
-            py build_exe.py
-          }
+          .\build.ps1 -EmbedConfig -ConfigPath ".\config.json" -Clean
+
+      # Secure cleanup: remove temporary config.json to ensure no config file is shipped
+      - name: Cleanup temporary config
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path config.json) { Remove-Item -Force config.json }
 
       - name: Upload artifact (for debugging)
         uses: actions/upload-artifact@v4
