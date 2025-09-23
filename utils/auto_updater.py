@@ -22,6 +22,15 @@ from shared.config_loader import GITHUB_TOKEN
 
 logger = logging.getLogger(__name__)
 
+def _log_token_status():
+    """Log whether a GitHub token is present (do not print the token)."""
+    try:
+        present = bool(GITHUB_TOKEN)
+        length = len(GITHUB_TOKEN) if present else 0
+        logger.info(f"Updater: token_present={present} token_length={length}")
+    except Exception:
+        logger.info("Updater: token_present=unknown")
+
 class AutoUpdater:
     """Handles automatic updates for the executable version"""
     
@@ -35,6 +44,8 @@ class AutoUpdater:
         
         # Load update settings
         self.load_settings()
+        # Log token status once on init for diagnostics
+        _log_token_status()
     
     def load_settings(self):
         """Load update settings from file"""
@@ -112,8 +123,10 @@ class AutoUpdater:
             
             # Make API request to check latest version
             headers = {"Accept": "application/vnd.github+json"}
-            if GITHUB_TOKEN:
+            use_auth = bool(GITHUB_TOKEN)
+            if use_auth:
                 headers["Authorization"] = f"token {GITHUB_TOKEN}"
+            logger.info(f"Updater: GET {UPDATE_CHECK_URL} auth={use_auth}")
             response = requests.get(UPDATE_CHECK_URL, headers=headers, timeout=10)
             response.raise_for_status()
             
@@ -138,10 +151,11 @@ class AutoUpdater:
                     if asset.get("name", "").endswith(".exe"):
                         selected_asset = asset
                         # For private repos, use the API asset URL with auth
-                        if GITHUB_TOKEN:
+                        if use_auth:
                             download_url = asset.get("url")  # API URL for asset
                         else:
                             download_url = asset.get("browser_download_url")
+                        logger.info(f"Updater: selected asset name={asset.get('name','')} use_api_asset={use_auth}")
                         break
                 
                 if not download_url:
@@ -155,7 +169,7 @@ class AutoUpdater:
                     "published_at": release_data.get("published_at", ""),
                     "size": (selected_asset.get("size", 0) if selected_asset else 0),
                     # When using a private repo with token, we download via the API asset URL
-                    "use_api_asset": bool(GITHUB_TOKEN)
+                    "use_api_asset": use_auth
                 }
                 
                 self.update_available = True

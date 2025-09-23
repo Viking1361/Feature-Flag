@@ -40,8 +40,8 @@ jobs:
         run: |
           if (-not "${{ secrets.LD_API_KEY }}") { throw "Missing secret: LD_API_KEY" }
           if (-not "${{ secrets.PROJECT_KEY }}") { throw "Missing secret: PROJECT_KEY" }
-          # Optional PAT for private repo updater. If empty, updater will work for public repos only.
-          if (-not "${{ secrets.GH_TOKEN_APP }}") { Write-Host "[WARN] GH_TOKEN_APP not set (private repo updater downloads will fail)" }
+          # Required PAT for updater to access private repo releases/assets
+          if (-not "${{ secrets.GH_TOKEN_APP }}") { throw "Missing secret: GH_TOKEN_APP" }
 
       # Always embed internal config into the EXE at build time (internal-only)
       - name: Write config.json (internal build)
