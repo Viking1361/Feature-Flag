@@ -3,9 +3,11 @@ import ttkbootstrap as ttk
 from tkinter import messagebox
 import os
 import webbrowser
+import logging
 
 from version import get_version_info, GITHUB_OWNER, GITHUB_REPO
 from utils.auto_updater import get_updater
+from shared.config_loader import LOG_FILE
 
 # Import utility managers
 from utils.theme_manager import ThemeManager
@@ -21,6 +23,23 @@ from ui.tabs.log_tab import LogTab
 class FeatureFlagApp:
     def __init__(self, root):
         self.root = root
+        # Ensure logging is configured early so logs always show in Log Viewer
+        try:
+            if not logging.getLogger().handlers:
+                logging.basicConfig(
+                    filename=LOG_FILE,
+                    level=logging.INFO,
+                    format='%(asctime)s:%(levelname)s:%(message)s',
+                    encoding='utf-8'
+                )
+                # ASCII-only startup log
+                info = get_version_info()
+                logging.info(
+                    f"App start: version={info.get('version','')} build_date={info.get('build_date','')} log_file={os.path.abspath(LOG_FILE)}"
+                )
+        except Exception as e:
+            # Fallback to console if file logging fails
+            print(f"DEBUG: Logging initialization failed: {e}")
         
         # Set window title with current user and role
         from shared.user_session import user_session

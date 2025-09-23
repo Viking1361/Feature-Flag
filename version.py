@@ -2,7 +2,7 @@
 Version management for Feature Flag Manager
 """
 
-__version__ = "1.0.6"
+__version__ = "1.0.7"
 __build_date__ = "2025-09-23"
 __author__ = "Feature Flag Team"
 
