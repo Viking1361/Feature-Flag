@@ -20,6 +20,9 @@ from ui.tabs.create_tab import CreateTab
 from ui.tabs.enhanced_view_tab import EnhancedViewTab as ViewTab
 from ui.tabs.log_tab import LogTab
 
+# Module logger for this UI module
+logger = logging.getLogger(__name__)
+
 class FeatureFlagApp:
     def __init__(self, root):
         self.root = root
@@ -38,7 +41,7 @@ class FeatureFlagApp:
                     f"App start: version={info.get('version','')} build_date={info.get('build_date','')} log_file={os.path.abspath(LOG_FILE)}"
                 )
         except Exception as e:
-            # Fallback to console if file logging fails
+            # Fallback to console if file logging fails (ASCII-only)
             print(f"DEBUG: Logging initialization failed: {e}")
         
         # Set window title with current user and role
@@ -111,7 +114,7 @@ class FeatureFlagApp:
             if self.user_info_label and self.user_info_label.winfo_exists():
                 self.update_session_info()
             else:
-                print("DEBUG: Session info label not ready, skipping periodic updates")
+                logger.debug("Session info label not ready, skipping periodic updates")
         
         # Logout button on the right
         logout_button = ttk.Button(top_frame, text="Logout", command=self.logout, bootstyle="danger")
@@ -204,7 +207,9 @@ class FeatureFlagApp:
                     display_text = f"{icon} {tab_text}"
                 tabs_config.append((tab_id, display_text, icon))
         
-        print(f"🔐 Tabs available for {user_session.username} ({user_session.role}): {[t[0] for t in tabs_config]}")
+        logger.debug(
+            f"Tabs available for {user_session.username} ({user_session.role}): {[t[0] for t in tabs_config]}"
+        )
 
         # Create tab buttons
         for i, (tab_id, tab_text, icon) in enumerate(tabs_config):
@@ -247,6 +252,13 @@ class FeatureFlagApp:
         # Show default tab (first available tab)
         default_tab = available_tab_ids[0] if available_tab_ids else "get"
         self.show_tab(default_tab)
+
+        # Auto-check for updates on startup (asynchronous; logs will show the request)
+        try:
+            get_updater(self.root).auto_check_on_startup()
+        except Exception as e:
+            # Log at debug level (ASCII-only message)
+            logger.debug(f"Auto update check init failed: {e}")
 
     def show_tab(self, tab_id):
         """Show the specified tab"""
@@ -340,13 +352,13 @@ class FeatureFlagApp:
                 self.root.after(60000, self.update_session_info)
             else:
                 # Session ended or widget destroyed, stop updating
-                print("DEBUG: Session ended or widget destroyed, stopping session updates")
+                logger.debug("Session ended or widget destroyed, stopping session updates")
                 
         except tk.TclError as e:
             # Widget has been destroyed
-            print(f"DEBUG: Widget destroyed during session update: {e}")
+            logger.debug(f"Widget destroyed during session update: {e}")
         except Exception as e:
-            print(f"DEBUG: Error updating session info: {e}")
+            logger.debug(f"Error updating session info: {e}")
     
     # --- Help menu handlers ---
     def open_documentation(self):
@@ -379,9 +391,9 @@ class FeatureFlagApp:
         try:
             if hasattr(self, 'user_info_label'):
                 self.user_info_label = None
-                print("DEBUG: Cleared user_info_label reference during logout")
+                logger.debug("Cleared user_info_label reference during logout")
         except Exception as e:
-            print(f"DEBUG: Error during logout cleanup: {e}")
+            logger.debug(f"Error during logout cleanup: {e}")
         
         # Clear user session
         user_session.logout()

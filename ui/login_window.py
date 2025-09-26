@@ -7,12 +7,16 @@ import threading
 import getpass
 import ctypes
 import platform
+import logging
+from shared.config_loader import ADMIN_USERNAME, ADMIN_PASSWORD
 try:
     from ctypes import wintypes
 except ImportError:
     wintypes = None
 from ui.main_app import FeatureFlagApp
 from shared.user_session import user_session
+
+logger = logging.getLogger(__name__)
 
 class LoginWindow:
     def __init__(self, master):
@@ -45,6 +49,9 @@ class LoginWindow:
         # Check if Windows authentication is available
         windows_auth_available = platform.system() == "Windows" and wintypes is not None
         
+        # Determine dev mode for optional backdoor credentials (disabled by default)
+        self.dev_mode = os.environ.get("DEV_MODE", "").lower() in ("1", "true", "yes", "on")
+
         # Welcome message with role-based login instructions
         if system_username:
             welcome_text = f"Welcome back, {system_username}! 👋"
@@ -56,8 +63,12 @@ class LoginWindow:
                 instruction_text = "👤 User Access: Use your Windows password"
                 color = "lightblue"
             else:
-                instruction_text = "🔧 Development mode: use 'ia1'"
-                color = "orange"
+                if self.dev_mode:
+                    instruction_text = "🔧 Development mode: use 'ia1'"
+                    color = "orange"
+                else:
+                    instruction_text = "🔧 Development mode (test credentials disabled)"
+                    color = "orange"
             
             ttk.Label(login_frame, text=instruction_text, font=("Helvetica", 9), 
                      foreground=color).pack(pady=(0, 5))
@@ -70,14 +81,17 @@ class LoginWindow:
             else:
                 ttk.Label(login_frame, text="Development mode", 
                          font=("Helvetica", 10), foreground="white").pack(pady=(0, 5))
-                instruction_text = "🔧 Use: Admin / ia1"
+                if self.dev_mode:
+                    instruction_text = "🔧 Use: Admin / ia1"
+                else:
+                    instruction_text = "🔧 Test credentials disabled"
                 color = "orange"
             
             ttk.Label(login_frame, text=instruction_text, font=("Helvetica", 9), 
                      foreground=color).pack(pady=(0, 2))
         
-        # Admin access instructions
-        admin_instruction = "👑 Admin Access: Use 'Admin' / 'ia1' (includes View Tab)"
+        # Admin access instructions (static credentials are always enabled for internal tool)
+        admin_instruction = f"👑 Admin Access: Use '{ADMIN_USERNAME}' / '{ADMIN_PASSWORD}' (includes View Tab)"
         ttk.Label(login_frame, text=admin_instruction, font=("Helvetica", 9), 
                  foreground="white").pack(pady=(0, 10))
         
@@ -136,7 +150,7 @@ class LoginWindow:
         try:
             if (not hasattr(self, 'username_entry') or not self.username_entry.winfo_exists() or
                 not hasattr(self, 'password_entry') or not self.password_entry.winfo_exists()):
-                print("DEBUG: Login widgets no longer exist, ignoring login attempt")
+                logger.debug("Login widgets no longer exist, ignoring login attempt")
                 return
             
             username = self.username_entry.get()
@@ -146,7 +160,7 @@ class LoginWindow:
                 messagebox.showerror("Login Failed", "Please enter both username and password")
                 return
         except tk.TclError as e:
-            print(f"DEBUG: Widget access error during login: {e}")
+            logger.debug(f"Widget access error during login: {e}")
             return
 
         # Show loader immediately while authenticating
@@ -165,9 +179,12 @@ class LoginWindow:
             role = "user"
             uname = username
             try:
-                if (username.lower() == "admin" or username == "ia") and password == "ia1":
+                # Static admin credentials (always enabled). Accept configured admin username (case-insensitive).
+                # Optionally accept 'ia' as a short alias for backwards compatibility.
+                allowed_admin_usernames = {str(ADMIN_USERNAME).lower(), "ia"}
+                if username and password and username.lower() in allowed_admin_usernames and password == ADMIN_PASSWORD:
                     valid = True
-                    uname = "admin"
+                    uname = ADMIN_USERNAME
                     method = "admin_credentials"
                     role = "admin"
                 elif system_user and username == system_user:
@@ -193,18 +210,18 @@ class LoginWindow:
             self.hide_startup_loader()
             windows_auth_available = platform.system() == "Windows" and wintypes is not None
             system_username = self.get_system_username()
+            # Always show static admin credentials guidance
+            admin_hint = f"👑 Admin Access (All Features):\n• Username: {ADMIN_USERNAME}\n• Password: {ADMIN_PASSWORD}"
             if system_username:
                 if windows_auth_available:
-                    error_msg = (f"Login Failed!\n\n👤 User Access (Basic Functions):\n• Username: {system_username}\n• Password: Your Windows password\n\n"
-                                 f"👑 Admin Access (All Functions + View Tab):\n• Username: Admin\n• Password: ia1")
+                    error_msg = (f"Login Failed!\n\n👤 User Access (Basic Functions):\n• Username: {system_username}\n• Password: Your Windows password\n\n" + admin_hint)
                 else:
-                    error_msg = (f"Login Failed!\n\n👤 User Access:\n• Username: {system_username}\n• Password: ia1\n\n"
-                                 f"👑 Admin Access (includes View Tab):\n• Username: Admin\n• Password: ia1")
+                    error_msg = (f"Login Failed!\n\n👤 User Access: Not available on this system\n\n" + admin_hint)
             else:
                 if windows_auth_available:
-                    error_msg = ("Login Failed!\n\n👤 User Access: Use Windows credentials\n\n👑 Admin Access (includes View Tab):\n• Username: Admin\n• Password: ia1")
+                    error_msg = ("Login Failed!\n\n👤 User Access: Use Windows credentials\n\n" + admin_hint)
                 else:
-                    error_msg = ("Login Failed!\n\n👑 Admin Access:\n• Username: Admin\n• Password: ia1")
+                    error_msg = ("Login Failed!\n\n" + admin_hint)
             messagebox.showerror("Login Failed", error_msg)
 
     def show_startup_loader(self, message: str = "Loading..."):
@@ -267,9 +284,9 @@ class LoginWindow:
                 self.username_entry.unbind('<Return>')
             if hasattr(self, 'password_entry') and self.password_entry.winfo_exists():
                 self.password_entry.unbind('<Return>')
-            print("DEBUG: Unbound login event handlers")
+            logger.debug("Unbound login event handlers")
         except tk.TclError as e:
-            print(f"DEBUG: Error unbinding login events: {e}")
+            logger.debug(f"Error unbinding login events: {e}")
 
         # Clear login widgets and init app
         for widget in self.master.winfo_children():
@@ -296,11 +313,11 @@ class LoginWindow:
             import os.path
             home_dir = os.path.expanduser("~")
             if home_dir and home_dir != "~":
-                # Extract username from path like "C:\Users\vanasuri"
+                # Extract username from path like "C:\\Users\\vanasuri"
                 username = os.path.basename(home_dir)
                 if username and username.strip():
                     raw_username = username.strip()
-                    print(f"DEBUG: Username from home dir: '{raw_username}'")
+                    logger.debug(f"Username from home dir: '{raw_username}'")
         except Exception:
             pass
         
@@ -310,7 +327,7 @@ class LoginWindow:
                 username = os.environ.get('USERNAME') or os.environ.get('USER')
                 if username and username.strip():
                     raw_username = username.strip()
-                    print(f"DEBUG: Username from environment: '{raw_username}'")
+                    logger.debug(f"Username from environment: '{raw_username}'")
             except Exception:
                 pass
         
@@ -320,7 +337,7 @@ class LoginWindow:
                 username = getpass.getuser()
                 if username and username.strip():
                     raw_username = username.strip()
-                    print(f"DEBUG: Username from getpass: '{raw_username}'")
+                    logger.debug(f"Username from getpass: '{raw_username}'")
             except Exception:
                 pass
         
@@ -330,7 +347,7 @@ class LoginWindow:
                 username = os.getlogin()
                 if username and username.strip():
                     raw_username = username.strip()
-                    print(f"DEBUG: Username from getlogin: '{raw_username}'")
+                    logger.debug(f"Username from getlogin: '{raw_username}'")
             except Exception:
                 pass
         
@@ -344,9 +361,13 @@ class LoginWindow:
     def verify_windows_password(self, username, password):
         """Verify password against Windows authentication"""
         if platform.system() != "Windows" or wintypes is None:
-            # Fallback for non-Windows systems or missing wintypes - use static password
-            print(f"🔒 Fallback authentication for {username} (wintypes={wintypes is not None})")
-            return password == "ia1"
+            # Fallback for non-Windows systems or missing wintypes - only in DEV mode
+            if self.dev_mode:
+                logger.info(f"Fallback authentication for {username} (wintypes={wintypes is not None})")
+                return password == "ia1"
+            else:
+                logger.warning("Windows authentication unavailable and DEV_MODE is off; denying login")
+                return False
         
         try:
             # Try Windows authentication using LogonUser API
@@ -374,17 +395,17 @@ class LoginWindow:
             if success:
                 # Close the handle
                 kernel32.CloseHandle(handle)
-                print(f"🔒 Windows authentication successful for {username}")
+                logger.info(f"Windows authentication successful for {username}")
                 return True
             else:
                 error_code = kernel32.GetLastError()
-                print(f"🔒 Windows authentication failed for {username}: Error {error_code}")
+                logger.warning(f"Windows authentication failed for {username}: Error {error_code}")
                 return False
                 
         except Exception as e:
-            print(f"🔒 Windows authentication error: {str(e)}")
+            logger.error(f"Windows authentication error: {str(e)}")
             # Fallback to static password for development/testing
-            print(f"🔒 Using fallback authentication for {username}")
+            logger.info(f"Using fallback authentication for {username}")
             return password == "ia1"
     
     def _clean_username(self, raw_username):
@@ -393,22 +414,22 @@ class LoginWindow:
             return None
         
         username = raw_username.strip()
-        print(f"DEBUG: Raw username: '{raw_username}'")  # Debug line
+        logger.debug(f"Raw username: '{raw_username}'")  # Debug line
         
         # Remove email domain if present (e.g., "user@domain.com" -> "user")
         if '@' in username:
             username = username.split('@')[0]
-            print(f"DEBUG: After email cleanup: '{username}'")
+            logger.debug(f"After email cleanup: '{username}'")
         
         # Remove Windows domain if present (e.g., "DOMAIN\\user" -> "user")
         if '\\' in username:
             username = username.split('\\')[-1]
-            print(f"DEBUG: After domain cleanup: '{username}'")
+            logger.debug(f"After domain cleanup: '{username}'")
         
         # For dotted usernames, be more careful about which part to keep
         if '.' in username:
             parts = username.split('.')
-            print(f"DEBUG: Username parts: {parts}")
+            logger.debug(f"Username parts: {parts}")
             
             # If it looks like "first.last", check if last part starts with user folder name pattern
             # For "vinod.anasuri" we want "vanasuri" not "anasuri"
@@ -428,11 +449,11 @@ class LoginWindow:
                 # For multiple dots, take the last meaningful part
                 username = parts[-1]
             
-            print(f"DEBUG: After dot cleanup: '{username}'")
+            logger.debug(f"After dot cleanup: '{username}'")
         
         # Final cleanup - ensure we don't have empty username
         final_username = username.strip() if username else None
-        print(f"DEBUG: Final username: '{final_username}'")
+        logger.debug(f"Final username: '{final_username}'")
         
         return final_username
     

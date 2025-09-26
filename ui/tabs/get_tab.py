@@ -14,6 +14,9 @@ except ImportError:
 from api_client import get_client
 import json
 
+# Module logger for this UI module
+logger = logging.getLogger(__name__)
+
 class GetTab:
     def __init__(self, parent, history_manager, theme_manager):
         self.parent = parent
@@ -58,7 +61,7 @@ class GetTab:
         input_container.pack(fill="x", pady=(0, 25))
         
         # Create a modern card-like frame
-        input_frame = ttk.Frame(input_container, style="Card.TFrame")
+        input_frame = ttk.Frame(input_container, style="Content.TFrame")
         input_frame.pack(fill="x", padx=5)
         
         # Card header
@@ -195,7 +198,7 @@ class GetTab:
         action_container.pack(fill="x", pady=(10, 0))
         
         # Action buttons with enhanced modern styling
-        action_frame = ttk.Frame(action_container, style="Card.TFrame", padding=10)
+        action_frame = ttk.Frame(action_container, style="Content.TFrame", padding=10)
         action_frame.pack(fill="x", padx=10)
         
         # Centered button layout
@@ -225,7 +228,7 @@ class GetTab:
         columns_container.pack(fill="both", expand=True, padx=10, pady=10)
         
         # === LEFT COLUMN: FLAG STATUS ===
-        left_column = ttk.Frame(columns_container, style="Card.TFrame", padding=20)
+        left_column = ttk.Frame(columns_container, style="Content.TFrame", padding=20)
         left_column.pack(side="left", fill="both", expand=True, padx=(0, 5))
         
         # Flag status header with modern styling
@@ -281,7 +284,7 @@ class GetTab:
         self.status_display.pack(pady=10, anchor="w")
 
         # === RIGHT COLUMN: API RESPONSE DETAILS ===
-        right_column = ttk.Frame(columns_container, style="Card.TFrame", padding=20)
+        right_column = ttk.Frame(columns_container, style="Content.TFrame", padding=20)
         right_column.pack(side="right", fill="both", expand=True, padx=(5, 0))
         
         # API Response header
@@ -312,10 +315,13 @@ class GetTab:
             font=("Consolas", 9),  # Slightly smaller font to fit more content
             wrap="none",  # No wrapping for better JSON formatting
             state="disabled",
-            bg=self.theme_manager.get_theme_config()["colors"]["surface"],
+            bg=self.theme_manager.get_theme_config()["colors"]["background"],
             fg=self.theme_manager.get_theme_config()["colors"]["text"],
             selectbackground=self.theme_manager.get_theme_config()["colors"]["primary"],
-            insertbackground=self.theme_manager.get_theme_config()["colors"]["text"]
+            insertbackground=self.theme_manager.get_theme_config()["colors"]["text"],
+            bd=0,
+            highlightthickness=0,
+            relief="flat"
         )
         
         # Enhanced scrollbar setup
@@ -360,7 +366,7 @@ class GetTab:
             # Force UI update to show loading indicators immediately
             self.parent.update_idletasks()
         except Exception as e:
-            print(f"Error setting up loading indicators: {str(e)}")
+            logger.debug(f"Error setting up loading indicators: {str(e)}")
 
         try:
             # Get flag status using LaunchDarkly API
@@ -512,9 +518,9 @@ class GetTab:
 
     def determine_variation(self, context_data, env_data, flag_data):
         """Determine flag variation based on user context"""
-        # Debug: Print environment data
-        print(f"DEBUG: Environment data: {json.dumps(env_data, indent=2)}")
-        print(f"DEBUG: User context: {json.dumps(context_data, indent=2)}")
+        # Debug: Environment and context details
+        logger.debug(f"Environment data: {json.dumps(env_data, indent=2)}")
+        logger.debug(f"User context: {json.dumps(context_data, indent=2)}")
         
         # Check if flag is enabled
         if not env_data.get("on", False):
@@ -528,7 +534,7 @@ class GetTab:
         rules = env_data.get("rules", [])
         targets = env_data.get("targets", [])
         
-        print(f"DEBUG: Found {len(rules)} rules and {len(targets)} targets")
+        logger.debug(f"Found {len(rules)} rules and {len(targets)} targets")
         
         # Check if user matches any targets
         user_key = context_data.get("key", "")
@@ -543,7 +549,7 @@ class GetTab:
         
         # Check if user matches any rules
         for i, rule in enumerate(rules):
-            print(f"DEBUG: Evaluating rule {i}: {json.dumps(rule, indent=2)}")
+            logger.debug(f"Evaluating rule {i}: {json.dumps(rule, indent=2)}")
             if self.evaluate_rule(context_data, rule):
                 variation = rule.get("variation", 0)
                 return {
@@ -555,7 +561,7 @@ class GetTab:
         # Default to fallthrough
         fallthrough = env_data.get("fallthrough", {})
         variation = fallthrough.get("variation", 0)
-        print(f"DEBUG: Using fallthrough variation {variation}")
+        logger.debug(f"Using fallthrough variation {variation}")
         return {
             "variation": f"Fallthrough (Variation {variation})",
             "value": self.get_variation_value(variation, flag_data),
@@ -566,8 +572,8 @@ class GetTab:
         """Evaluate if user context matches a rule"""
         clauses = rule.get("clauses", [])
         
-        print(f"DEBUG: Evaluating rule with {len(clauses)} clauses")
-        print(f"DEBUG: Context data: {context_data}")
+        logger.debug(f"Evaluating rule with {len(clauses)} clauses")
+        logger.debug(f"Context data: {context_data}")
         
         for clause in clauses:
             attribute = clause.get("attribute", "")
@@ -590,27 +596,20 @@ class GetTab:
                 pass
             
             # Debug logging
-            print(f"DEBUG: Evaluating clause - attribute='{attribute}', op='{op}', user_value='{user_value}' (type: {type(user_value)}), values={values}")
+            logger.debug(f"Evaluating clause - attribute='{attribute}', op='{op}', user_value='{user_value}' (type: {type(user_value)}), values={values}")
             
             # Simple evaluation (can be enhanced)
             if op == "in" and user_value in values:
-                print(f"DEBUG: Rule matched: {user_value} in {values}")
+                logger.debug(f"Rule matched: {user_value} in {values}")
                 return True
             elif op == "is" and user_value in values:
-                print(f"DEBUG: Rule matched: {user_value} is in {values}")
+                logger.debug(f"Rule matched: {user_value} is in {values}")
                 return True
             elif op == "matches" and str(user_value) in [str(v) for v in values]:
-                print(f"DEBUG: Rule matched (string comparison): {user_value} matches {values}")
+                logger.debug(f"Rule matched (string comparison): {user_value} matches {values}")
                 return True
         
-        print(f"DEBUG: No rule match found")
-        return False
-
-    def get_variation_value(self, variation_index, flag_data):
-        """Get the actual value for a variation index"""
-        variations = flag_data.get("variations", [])
-        if 0 <= variation_index < len(variations):
-            return variations[variation_index].get("value", False)
+        logger.debug("No rule match found")
         return False
 
     def display_flag_status(self, flag_data):

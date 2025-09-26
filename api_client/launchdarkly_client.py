@@ -354,7 +354,7 @@ class LaunchDarklyClient:
             progress_callback: Function called with (current, total, flag_key) for progress updates
             completion_callback: Function called with (orphaned_flags, csv_filename) when complete
         """
-        print(f"🔍 ORPHANED EXPORT: Starting background orphaned flags detection...")
+        self.logger.info("ORPHANED EXPORT: Starting background orphaned flags detection...")
         
         try:
             # Get all flags from bulk API first
@@ -364,7 +364,7 @@ class LaunchDarklyClient:
             orphaned_flags = []
             total_flags = len(flag_keys)
             
-            print(f"🔍 ORPHANED EXPORT: Processing {total_flags} flags...")
+            self.logger.info(f"ORPHANED EXPORT: Processing {total_flags} flags...")
             
             for i, flag_key in enumerate(flag_keys):
                 try:
@@ -381,10 +381,10 @@ class LaunchDarklyClient:
                             # Enrich flag data for export
                             enriched_flag = self._enrich_flag_for_export(individual_flag)
                             orphaned_flags.append(enriched_flag)
-                            print(f"⚠️ ORPHANED EXPORT: Found orphaned flag: {flag_key}")
+                            self.logger.warning(f"ORPHANED EXPORT: Found orphaned flag: {flag_key}")
                     
                 except Exception as e:
-                    print(f"❌ ORPHANED EXPORT: Error checking {flag_key}: {e}")
+                    self.logger.error(f"ORPHANED EXPORT: Error checking {flag_key}: {e}")
                     continue
             
             # Generate CSV export
@@ -393,8 +393,8 @@ class LaunchDarklyClient:
             
             self._write_orphaned_csv(orphaned_flags, filename)
             
-            print(f"✅ ORPHANED EXPORT: Complete! Found {len(orphaned_flags)} orphaned flags")
-            print(f"📁 ORPHANED EXPORT: Report saved to: {filename}")
+            self.logger.info(f"ORPHANED EXPORT: Complete! Found {len(orphaned_flags)} orphaned flags")
+            self.logger.info(f"ORPHANED EXPORT: Report saved to: {filename}")
             
             # Completion callback
             if completion_callback:
@@ -403,7 +403,7 @@ class LaunchDarklyClient:
             return orphaned_flags, filename
             
         except Exception as e:
-            print(f"❌ ORPHANED EXPORT: Fatal error: {e}")
+            self.logger.error(f"ORPHANED EXPORT: Fatal error: {e}")
             if completion_callback:
                 completion_callback(None, None, str(e))
             return None, None
@@ -528,10 +528,10 @@ class LaunchDarklyClient:
                 result = response.json()
                 return result
             else:
-                print(f"⚠️ Individual flag fetch failed for {flag_key}: {response.status_code}")
+                self.logger.warning(f"Individual flag fetch failed for {flag_key}: {response.status_code}")
                 return {}
         except Exception as e:
-            print(f"❌ Individual flag fetch error for {flag_key}: {e}")
+            self.logger.error(f"Individual flag fetch error for {flag_key}: {e}")
             return {}
     
     def _get_environment_status(self, flag: Dict) -> Dict[str, Dict]:
@@ -579,10 +579,10 @@ class LaunchDarklyClient:
             "orphaned_count": 0
         }
         
-        print("=== TESTING ORPHANED FLAG DETECTION ===")
+        self.logger.info("=== TESTING ORPHANED FLAG DETECTION ===")
         
         for flag_key in flag_keys:
-            print(f"\n🔍 Testing flag: {flag_key}")
+            self.logger.info(f"Testing flag: {flag_key}")
             
             # Get individual flag details
             individual_flag = self.get_flag(flag_key)
@@ -614,13 +614,13 @@ class LaunchDarklyClient:
                 if is_orphaned:
                     results["orphaned_count"] += 1
                     
-                print(f"  📊 Environments: {len(environments)}")
-                print(f"  🏷️  Orphaned: {is_orphaned}")
+                self.logger.info(f"  Environments: {len(environments)}")
+                self.logger.info(f"  Orphaned: {is_orphaned}")
                 
             else:
-                print(f"  ❌ Failed to fetch individual flag data")
+                self.logger.error("  Failed to fetch individual flag data")
         
-        print(f"\n📈 SUMMARY: {results['orphaned_count']}/{len(flag_keys)} flags are orphaned")
+        self.logger.info(f"SUMMARY: {results['orphaned_count']}/{len(flag_keys)} flags are orphaned")
         return results
     
     def update_flag(self, flag_key: str, environment: str, operations: List[Dict], comment: str = None) -> bool:

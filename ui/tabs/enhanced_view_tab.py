@@ -11,10 +11,14 @@ import queue
 import time
 import json
 import webbrowser
+import logging
 from datetime import datetime, timedelta
 from api_client import get_client
 from shared.config_loader import PROJECT_KEY
 from utils.settings_manager import SettingsManager
+
+# Module logger for this UI module
+logger = logging.getLogger(__name__)
 
 class ToastNotification:
     """Toast notification system for user feedback"""
@@ -230,19 +234,19 @@ class EnhancedViewTab:
     def load_saved_settings(self):
         """Load and apply saved user settings"""
         try:
-            print("DEBUG: Loading saved settings...")
+            logger.debug("Loading saved settings...")
             view_options = self.settings_manager.get_view_options()
             
             # Apply auto-refresh settings
             self.auto_refresh_enabled = view_options.get("auto_refresh_enabled", True)
             self.auto_refresh_interval = view_options.get("auto_refresh_interval", 30)
             
-            print(f"DEBUG: Loaded settings - Auto-refresh: {self.auto_refresh_enabled}, Interval: {self.auto_refresh_interval}s")
+            logger.debug(f"Loaded settings - Auto-refresh: {self.auto_refresh_enabled}, Interval: {self.auto_refresh_interval}s")
             
             # Note: Row height will be applied when UI is created
             
         except Exception as e:
-            print(f"DEBUG: Error loading settings: {e}")
+            logger.error(f"Error loading settings: {e}")
             # Use defaults if loading fails
             self.auto_refresh_enabled = True
             self.auto_refresh_interval = 30
@@ -255,10 +259,10 @@ class EnhancedViewTab:
             
             if hasattr(self, 'tree'):
                 self.configure_dramatic_styling(row_height=saved_height)
-                print(f"DEBUG: Applied saved row height with scaled fonts: {saved_height}px")
+                logger.debug(f"Applied saved row height with scaled fonts: {saved_height}px")
                 
         except Exception as e:
-            print(f"DEBUG: Error applying saved row height: {e}")
+            logger.error(f"Error applying saved row height: {e}")
     
     def setup_keyboard_shortcuts(self):
         """Setup keyboard shortcuts"""
@@ -288,35 +292,33 @@ class EnhancedViewTab:
     def toggle_sidebar(self):
         """Toggle sidebar visibility"""
         try:
-            print("DEBUG: Toggle sidebar clicked!")
-            print(f"DEBUG: Current sidebar_collapsed state: {self.sidebar_collapsed}")
-            print(f"DEBUG: Sidebar frame exists: {hasattr(self, 'sidebar_frame')}")
+            logger.debug("Toggle sidebar clicked!")
+            logger.debug(f"Current sidebar_collapsed state: {self.sidebar_collapsed}")
+            logger.debug(f"Sidebar frame exists: {hasattr(self, 'sidebar_frame')}")
             
             if not hasattr(self, 'sidebar_frame'):
-                print("DEBUG: ERROR - sidebar_frame does not exist!")
+                logger.warning("sidebar_frame does not exist!")
                 return
                 
             self.sidebar_collapsed = not self.sidebar_collapsed
-            print(f"DEBUG: New sidebar_collapsed state: {self.sidebar_collapsed}")
+            logger.debug(f"New sidebar_collapsed state: {self.sidebar_collapsed}")
             
             if self.sidebar_collapsed:
-                print("DEBUG: Hiding sidebar...")
+                logger.debug("Hiding sidebar...")
                 self.sidebar_frame.pack_forget()
                 self.toggle_sidebar_btn.config(text="🔍 Show Filters")
-                print("DEBUG: Sidebar hidden, button text updated")
+                logger.debug("Sidebar hidden, button text updated")
                 self.toast.show_info("🔍 Filters hidden")
             else:
-                print("DEBUG: Showing sidebar...")
+                logger.debug("Showing sidebar...")
                 # Re-pack the sidebar with the original settings
                 self.sidebar_frame.pack(side="left", fill="y", padx=(0, 10), before=self.sidebar_frame.master.winfo_children()[1] if len(self.sidebar_frame.master.winfo_children()) > 1 else None)
                 self.toggle_sidebar_btn.config(text="🔍 Hide Filters")
-                print("DEBUG: Sidebar shown, button text updated")
+                logger.debug("Sidebar shown, button text updated")
                 self.toast.show_info("🔍 Filters shown")
                 
         except Exception as e:
-            print(f"DEBUG: Error in toggle_sidebar: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Error in toggle_sidebar: {e}")
             self.toast.show_error(f"Error toggling filters: {str(e)}")
     
     def setup_ui(self):
@@ -347,7 +349,7 @@ class EnhancedViewTab:
                 self.toggle_sidebar_btn.config(text="🔍 Show Filters")
             else:
                 self.toggle_sidebar_btn.config(text="🔍 Hide Filters")
-            print(f"DEBUG: Button text set to match sidebar state: collapsed={self.sidebar_collapsed}")
+            logger.debug(f"Button text set to match sidebar state: collapsed={self.sidebar_collapsed}")
         
         # Status bar
         self.setup_status_bar(main_container)
@@ -390,7 +392,7 @@ class EnhancedViewTab:
         
         # Bind the command after creation to ensure it works
         self.toggle_sidebar_btn.config(command=lambda: self.toggle_sidebar())
-        print("DEBUG: Toggle sidebar button created and command bound successfully")
+        logger.debug("Toggle sidebar button created and command bound successfully")
         
         # Auto-refresh toggle
         self.auto_refresh_btn = ttk.Button(
@@ -412,7 +414,7 @@ class EnhancedViewTab:
     
     def setup_stats_bar(self, parent):
         """Setup quick statistics bar"""
-        self.stats_frame = ttk.Frame(parent, style="Card.TFrame")
+        self.stats_frame = ttk.Frame(parent, style="Content.TFrame")
         self.stats_frame.pack(fill="x", pady=(0, 20))
         
         stats_content = ttk.Frame(self.stats_frame)
@@ -423,11 +425,11 @@ class EnhancedViewTab:
         
         # Initialize with placeholders
         stats = [
-            ("total", "📊 Total Flags", "0"),
-            ("active", "🟢 Active", "0"),
-            ("archived", "🔴 Archived", "0"),
-            ("orphaned", "⚠️ Orphaned", "0"),
-            ("health", "❤️ Avg Health", "0%")
+            ("total", " Total Flags", "0"),
+            ("active", " Active", "0"),
+            ("archived", " Archived", "0"),
+            ("orphaned", " Orphaned", "0"),
+            ("health", " Avg Health", "0%")
         ]
         
         for i, (key, label, value) in enumerate(stats):
@@ -451,16 +453,16 @@ class EnhancedViewTab:
     
     def setup_sidebar(self, parent):
         """Setup collapsible sidebar with filters and insights"""
-        print("DEBUG: Setting up sidebar...")
-        self.sidebar_frame = ttk.Frame(parent, style="Card.TFrame")
+        logger.debug("Setting up sidebar...")
+        self.sidebar_frame = ttk.Frame(parent, style="Content.TFrame")
         self.sidebar_frame.pack(side="left", fill="y", padx=(0, 10))
-        print("DEBUG: Sidebar frame created and packed")
+        logger.debug("Sidebar frame created and packed")
         
         sidebar_content = ttk.Frame(self.sidebar_frame)
         sidebar_content.pack(fill="both", expand=True, padx=20, pady=20)
         
         # Search Section
-        search_section = ttk.LabelFrame(sidebar_content, text="🔍 Search & Filters", padding=15)
+        search_section = ttk.LabelFrame(sidebar_content, text=" Search & Filters", padding=15)
         search_section.pack(fill="x", pady=(0, 15))
         
         # Search entry
@@ -477,7 +479,7 @@ class EnhancedViewTab:
         # Clear search button
         ttk.Button(
             search_section,
-            text="✕ Clear",
+            text=" Clear",
             bootstyle="secondary",
             command=self.clear_search
         ).pack(fill="x", pady=(0, 10))
@@ -519,7 +521,7 @@ class EnhancedViewTab:
         health_combo.bind("<<ComboboxSelected>>", self.on_filter_change)
         
         # Data Insights Section
-        insights_section = ttk.LabelFrame(sidebar_content, text="📊 Data Insights", padding=15)
+        insights_section = ttk.LabelFrame(sidebar_content, text=" Data Insights", padding=15)
         insights_section.pack(fill="x", pady=(0, 15))
         
         # Recently Modified section
@@ -528,7 +530,7 @@ class EnhancedViewTab:
         
         ttk.Label(
             self.recent_frame,
-            text="🕐 Recently Modified (7 days)",
+            text=" Recently Modified (7 days)",
             font=("Segoe UI", 10, "bold")
         ).pack(anchor="w")
         
@@ -546,7 +548,7 @@ class EnhancedViewTab:
         
         ttk.Label(
             self.orphaned_frame,
-            text="⚠️ Orphaned Flags",
+            text=" Orphaned Flags",
             font=("Segoe UI", 10, "bold"),
             foreground="#dc2626"
         ).pack(anchor="w")
@@ -560,7 +562,7 @@ class EnhancedViewTab:
         self.orphaned_listbox.bind("<Double-Button-1>", self.on_orphaned_flag_select)
         
         # Performance Section
-        perf_section = ttk.LabelFrame(sidebar_content, text="⚡ Performance", padding=15)
+        perf_section = ttk.LabelFrame(sidebar_content, text=" Performance", padding=15)
         perf_section.pack(fill="x")
         
         self.perf_labels = {}
@@ -589,7 +591,7 @@ class EnhancedViewTab:
     
     def setup_main_content(self, parent):
         """Setup main content area with enhanced treeview"""
-        main_frame = ttk.Frame(parent, style="Card.TFrame")
+        main_frame = ttk.Frame(parent, style="Content.TFrame")
         main_frame.pack(side="right", fill="both", expand=True)
         
         content_frame = ttk.Frame(main_frame)
@@ -605,7 +607,7 @@ class EnhancedViewTab:
         
         ttk.Label(
             header_left,
-            text="📋 Feature Flags",
+            text=" Feature Flags",
             font=("Segoe UI", 16, "bold")
         ).pack(side="left")
         
@@ -626,7 +628,7 @@ class EnhancedViewTab:
         # Export button
         export_btn = ttk.Button(
             toolbar,
-            text="💾 Export",
+            text=" Export",
             bootstyle="outline-secondary",
             command=self.export_flags
         )
@@ -635,7 +637,7 @@ class EnhancedViewTab:
         # Export Orphaned Flags button
         orphaned_export_btn = ttk.Button(
             toolbar,
-            text="⚠️ Export Orphaned",
+            text=" Export Orphaned",
             bootstyle="outline-warning",
             command=self.export_orphaned_flags_bg
         )
@@ -644,7 +646,7 @@ class EnhancedViewTab:
         # View options button
         view_btn = ttk.Button(
             toolbar,
-            text="👀 View Options",
+            text=" View Options",
             command=self.show_view_options
         )
         view_btn.pack(side="left", padx=(0, 5))
@@ -669,7 +671,7 @@ class EnhancedViewTab:
         # Copy selected button
         self.copy_btn = ttk.Button(
             toolbar,
-            text="📋 Copy Selected",
+            text=" Copy Selected",
             bootstyle="outline-primary",
             command=self.copy_selected_flags,
             state="disabled"
@@ -687,10 +689,10 @@ class EnhancedViewTab:
         tree_container = ttk.Frame(main_container)
         tree_container.pack(fill="both", expand=True)
         
-        print("DEBUG: Tree container packed AFTER pagination")
+        logger.debug("Tree container packed AFTER pagination")
         
         # Treeview with scrollbars in a modern card layout
-        tree_frame = ttk.Frame(tree_container, style="Card.TFrame")
+        tree_frame = ttk.Frame(tree_container, style="Content.TFrame")
         tree_frame.pack(fill="both", expand=True, pady=(0, 5))
         
         # Loading frame (only shown when loading) 
@@ -707,7 +709,7 @@ class EnhancedViewTab:
         # Apply saved row height after tree creation
         self.apply_saved_row_height()
         
-        print("DEBUG: Layout setup completed - pagination packed first, tree second")
+        logger.debug("Layout setup completed - pagination packed first, tree second")
         
         # Force layout update to ensure pagination shows
         main_container.update_idletasks()
@@ -736,7 +738,7 @@ class EnhancedViewTab:
         content_font_size = max(8, min(16, int(8 + (row_height - 20) * 8 / 80)))
         header_font_size = content_font_size + 1
         
-        print(f"DEBUG: Row height: {row_height}px, Content font: {content_font_size}pt, Header font: {header_font_size}pt")
+        logger.debug(f"Row height: {row_height}px, Content font: {content_font_size}pt, Header font: {header_font_size}pt")
         
         # Dynamic row height and modern styling with scaled fonts
         style.configure("Enhanced.Treeview",
@@ -897,22 +899,22 @@ class EnhancedViewTab:
     
     def setup_pagination(self, parent):
         """Setup enhanced pagination controls"""
-        print("DEBUG: Setting up pagination controls...")  # Debug
+        logger.debug("Setting up pagination controls...")
         
-        print("DEBUG: Creating pagination at bottom of parent frame")
+        logger.debug("Creating pagination at bottom of parent frame")
         
         # Create a SUPER PROMINENT pagination card that RESERVES space
         pagination_card = tk.Frame(parent, relief="solid", borderwidth=3, bg="#e2e8f0")
         pagination_card.pack(side="bottom", fill="x", pady=(15, 5), padx=10)  # Pack at BOTTOM first
         
-        print("DEBUG: Pagination card created and packed at bottom")
+        logger.debug("Pagination card created and packed at bottom")
         
         # Add highly visible background color 
         pagination_frame = tk.Frame(pagination_card, bg="#f1f5f9", relief="flat", bd=0, height=40)
         pagination_frame.pack(fill="x", padx=25, pady=25)
         pagination_frame.pack_propagate(False)  # Don't shrink below height=40
         
-        print("DEBUG: Pagination frame created with fixed height")
+        logger.debug("Pagination frame created with fixed height")
         
         # Page size selector (left side)
         size_frame = tk.Frame(pagination_frame, bg="#f8fafc")
@@ -932,13 +934,13 @@ class EnhancedViewTab:
         page_size_combo.pack(side="left", padx=(8, 0))
         page_size_combo.bind("<<ComboboxSelected>>", self.on_page_size_change)
         
-        print("DEBUG: Page size selector created")  # Debug
+        logger.debug("Page size selector created")
         
         # Pagination controls (centered)
         page_controls = tk.Frame(pagination_frame, bg="#f8fafc")
         page_controls.pack(expand=True)
         
-        print("DEBUG: Page controls frame created")  # Debug
+        logger.debug("Page controls frame created")
         
         self.prev_btn = ttk.Button(
             page_controls,
@@ -948,7 +950,7 @@ class EnhancedViewTab:
         )
         self.prev_btn.pack(side="left", padx=8)
         
-        print("DEBUG: Previous button created")  # Debug
+        logger.debug("Previous button created")
         
         # Initialize page info variable
         if not hasattr(self, 'page_info_var'):
@@ -963,7 +965,7 @@ class EnhancedViewTab:
         )
         page_info_label.pack(side="left", padx=25)
         
-        print("DEBUG: Page info label created")  # Debug
+        logger.debug("Page info label created")
         
         self.next_btn = ttk.Button(
             page_controls,
@@ -973,7 +975,7 @@ class EnhancedViewTab:
         )
         self.next_btn.pack(side="left", padx=8)
         
-        print("DEBUG: Next button created")  # Debug
+        logger.debug("Next button created")
         
         # Quick stats on the right
         stats_frame = tk.Frame(pagination_frame, bg="#f8fafc")
@@ -992,7 +994,7 @@ class EnhancedViewTab:
         )
         total_label.pack(side="right")
         
-        print("DEBUG: Pagination setup completed successfully!")  # Debug
+        logger.debug("Pagination setup completed successfully!")
     
     def setup_status_bar(self, parent):
         """Setup status bar"""
@@ -1547,11 +1549,11 @@ class EnhancedViewTab:
         
         # Debug: Print available environment names for the first few flags
         if hasattr(self, '_debug_env_count') and self._debug_env_count < 3:
-            print(f"DEBUG: Available environments for flag {flag.get('key', 'unknown')}: {list(env_status.keys())}")
+            logger.debug(f"Available environments for flag {flag.get('key', 'unknown')}: {list(env_status.keys())}")
             self._debug_env_count = getattr(self, '_debug_env_count', 0) + 1
         elif not hasattr(self, '_debug_env_count'):
             self._debug_env_count = 1
-            print(f"DEBUG: Available environments for flag {flag.get('key', 'unknown')}: {list(env_status.keys())}")
+            logger.debug(f"Available environments for flag {flag.get('key', 'unknown')}: {list(env_status.keys())}")
         
         def format_env_status(env_names):
             """Try multiple environment name variations"""
@@ -1945,7 +1947,7 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
     def show_view_options(self):
         """Show enhanced view customization options"""
         try:
-            print("DEBUG: Opening View Options dialog...")
+            logger.debug("Opening View Options dialog...")
             
             # Get the main window for proper parenting
             main_window = self.parent.winfo_toplevel()
@@ -1954,7 +1956,7 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
             options_window.geometry("500x700")  # Even larger for big buttons
             options_window.resizable(False, False)
             
-            print("DEBUG: View Options window created")
+            logger.debug("View Options window created")
             
             # Make it modal and center it
             options_window.transient(main_window)
@@ -1966,12 +1968,12 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
             y = (options_window.winfo_screenheight() // 2) - (700 // 2)
             options_window.geometry(f"500x700+{x}+{y}")
             
-            print("DEBUG: View Options dialog positioned and made modal")
+            logger.debug("View Options dialog positioned and made modal")
         
             main_frame = ttk.Frame(options_window, padding=25)
             main_frame.pack(fill="both", expand=True)
             
-            print("DEBUG: Main frame created")
+            logger.debug("Main frame created")
             
             # Enhanced title with icon
             title_frame = ttk.Frame(main_frame)
@@ -2001,7 +2003,7 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
             )
             settings_info.pack(pady=(5, 0))
             
-            print("DEBUG: Title section created")
+            logger.debug("Title section created")
         
             # Row height option with current value display
             height_frame = ttk.LabelFrame(main_frame, text="📏 Row Height", padding=15)
@@ -2036,7 +2038,7 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
             
             height_scale.config(command=update_height_display)
             
-            print("DEBUG: Row height section created")
+            logger.debug("Row height section created")
         
             # Color theme option
             theme_frame = ttk.LabelFrame(main_frame, text="🎨 Color Theme", padding=15)
@@ -2053,7 +2055,7 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
             )
             theme_combo.pack(fill="x", pady=(8, 0))
             
-            print("DEBUG: Color theme section created")
+            logger.debug("Color theme section created")
             
             # Auto-refresh interval
             refresh_frame = ttk.LabelFrame(main_frame, text="🔄 Auto-refresh", padding=15)
@@ -2080,7 +2082,7 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
             )
             interval_combo.pack(fill="x", pady=(8, 0))
             
-            print("DEBUG: Auto-refresh section created")
+            logger.debug("Auto-refresh section created")
         
             # Separator line before buttons
             separator = ttk.Separator(main_frame, orient="horizontal")
@@ -2091,11 +2093,11 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
             button_frame.pack(fill="x", pady=(15, 25), padx=5)
             button_frame.pack_propagate(False)  # Don't shrink below height=80
             
-            print("DEBUG: Button frame created and packed with visible background and fixed height")
-            
+            logger.debug("Button frame created and packed with visible background and fixed height")
+        
             def apply_options():
                 try:
-                    print("DEBUG: Applying view options...")
+                    logger.debug("Applying view options...")
                     
                     # Get values from form
                     new_height = int(float(height_var.get()))
@@ -2119,23 +2121,23 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
                     )
                     
                     if settings_saved:
-                        print("DEBUG: Settings saved successfully")
+                        logger.debug("Settings saved successfully")
                     else:
-                        print("DEBUG: Warning - settings may not have saved properly")
+                        logger.debug("Warning - settings may not have saved properly")
                     
                     # Apply settings to current UI with dynamic font scaling
                     self.configure_dramatic_styling(row_height=new_height)
                     
-                    print(f"DEBUG: Row height and fonts updated to {new_height}px")
+                    logger.debug(f"Row height and fonts updated to {new_height}px")
                     
                     # Apply auto-refresh settings to current instance
                     self.auto_refresh_enabled = auto_refresh_enabled
                     self.auto_refresh_interval = auto_refresh_interval
                     
                     if auto_refresh_enabled:
-                        print(f"DEBUG: Auto-refresh enabled: {auto_refresh_interval}s")
+                        logger.debug(f"Auto-refresh enabled: {auto_refresh_interval}s")
                     else:
-                        print("DEBUG: Auto-refresh disabled")
+                        logger.debug("Auto-refresh disabled")
                     
                     # Force tree update
                     if hasattr(self, 'tree'):
@@ -2148,15 +2150,15 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
                         self.toast.show_success(f"✅ View updated temporarily! Row height: {new_height}px, Refresh: {interval_val}")
                     
                     options_window.destroy()
-                    print("DEBUG: View options applied successfully")
+                    logger.debug("View options applied successfully")
                     
                 except Exception as e:
-                    print(f"DEBUG: Error applying options: {e}")
-                    self.toast.show_error(f"❌ Failed to apply: {str(e)}")
-            
+                    logger.exception(f"Error applying options: {e}")
+                    self.toast.show_error(f" Failed to apply: {str(e)}")
+        
             def reset_defaults():
                 try:
-                    print("DEBUG: Resetting to defaults...")
+                    logger.debug("Resetting to defaults...")
                     
                     # Reset form values
                     height_var.set("30")
@@ -2167,14 +2169,14 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
                     # Reset settings file to defaults
                     self.settings_manager.reset_to_defaults()
                     
-                    print("DEBUG: Defaults reset and saved")
+                    logger.debug("Defaults reset and saved")
                     self.toast.show_info("🔄 Settings reset to defaults")
                     
                 except Exception as e:
-                    print(f"DEBUG: Error resetting defaults: {e}")
-                    self.toast.show_error(f"❌ Failed to reset: {str(e)}")
+                    logger.exception(f"Error resetting defaults: {e}")
+                    self.toast.show_error(f" Failed to reset: {str(e)}")
             
-            print("DEBUG: Creating buttons...")
+            logger.debug("Creating buttons...")
             
             # Button layout with LARGER buttons for better visibility and usability
             reset_btn = tk.Button(
@@ -2191,7 +2193,7 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
                 cursor="hand2"
             )
             reset_btn.pack(side="left", padx=15, pady=15)
-            print("DEBUG: Reset button created and packed")
+            logger.debug("Reset button created and packed")
             
             # Spacer to push Apply and Cancel to the right
             spacer = tk.Frame(button_frame, bg="#f8fafc")
@@ -2211,7 +2213,7 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
                 cursor="hand2"
             )
             apply_btn.pack(side="right", padx=(15, 10), pady=15)
-            print("DEBUG: Apply button created and packed")
+            logger.debug("Apply button created and packed")
             
             cancel_btn = tk.Button(
                 button_frame,
@@ -2227,26 +2229,26 @@ LaunchDarkly URL: https://app.launchdarkly.com/{PROJECT_KEY}/features/{flag.get(
                 cursor="hand2"
             )
             cancel_btn.pack(side="right", padx=(10, 15), pady=15)
-            print("DEBUG: Cancel button created and packed")
+            logger.debug("Cancel button created and packed")
             
-            print("DEBUG: All buttons created and packed successfully!")
+            logger.debug("All buttons created and packed successfully!")
             
             # Force layout update and show dimensions for debugging
             options_window.update_idletasks()
             button_frame.update_idletasks()
             
-            print(f"DEBUG: Dialog size: {options_window.winfo_width()}x{options_window.winfo_height()}")
-            print(f"DEBUG: Expected button frame should be larger and more prominent now")
-            print(f"DEBUG: Button frame size: {button_frame.winfo_width()}x{button_frame.winfo_height()}")
-            print(f"DEBUG: Button frame position: x={button_frame.winfo_x()}, y={button_frame.winfo_y()}")
+            logger.debug(f"Dialog size: {options_window.winfo_width()}x{options_window.winfo_height()}")
+            logger.debug("Expected button frame should be larger and more prominent now")
+            logger.debug(f"Button frame size: {button_frame.winfo_width()}x{button_frame.winfo_height()}")
+            logger.debug(f"Button frame position: x={button_frame.winfo_x()}, y={button_frame.winfo_y()}")
             
-            print("DEBUG: View Options dialog fully created and ready")
+            logger.debug("View Options dialog fully created and ready")
             
             # Focus on the dialog
             options_window.focus_set()
             
         except Exception as e:
-            print(f"DEBUG: Error creating View Options dialog: {e}")
+            logger.exception(f"Error creating View Options dialog: {e}")
             self.toast.show_error(f"Failed to open View Options: {str(e)}")
     
     def copy_selected_flags(self):

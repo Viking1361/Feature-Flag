@@ -4,14 +4,8 @@ from api_config.api_endpoints import FeatureFlagEndpoints, APIHeaders, APIConfig
 from shared.constants import ENVIRONMENT_MAPPINGS
 from shared.config_loader import LOG_FILE
 
-# Configure logging
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.INFO,
-    format='%(asctime)s:%(levelname)s:%(message)s',
-    encoding='utf-8',
-    force=True
-)
+# Module logger (configuration is handled by the main app)
+logger = logging.getLogger(__name__)
 
 def _sanitize_headers(headers: dict) -> dict:
     """Redact sensitive headers before logging."""
@@ -27,7 +21,7 @@ def _sanitize_headers(headers: dict) -> dict:
 
 def get_authentication_token(parsed_url, query_params, pmc_id, site_id):
     auth_url = f"{parsed_url.scheme}://{parsed_url.netloc}/api/core/authentication/login"
-    print(auth_url)
+    logger.debug(f"Auth URL: {auth_url}")
     if pmc_id and not site_id:
         site_id = pmc_id
     
@@ -43,13 +37,17 @@ def get_authentication_token(parsed_url, query_params, pmc_id, site_id):
     
     for attempt in range(3):
         try:
-            auth_response = requests.post(auth_url, data=auth_form_data, verify=False)
+            auth_response = requests.post(
+                auth_url,
+                data=auth_form_data,
+                timeout=APIConfig.DEFAULT_TIMEOUT
+            )
             auth_response.raise_for_status()
             return auth_response.json()['access_token']
         except requests.exceptions.RequestException as e:
-            logging.error(f"Authentication API call failed (attempt {attempt + 1}): {e}")
+            logger.error(f"Authentication API call failed (attempt {attempt + 1}): {e}")
     
-    print("❌ Error: Authentication Failed after 3 attempts.")
+    logger.error("Authentication failed after 3 attempts.")
     return None
 
 def get_feature_flag_data(parsed_url, feature_flag_key, auth_token, app_context):
@@ -60,11 +58,15 @@ def get_feature_flag_data(parsed_url, feature_flag_key, auth_token, app_context)
 
     for attempt in range(3):
         try:
-            response = requests.get(feature_flag_url, headers=headers, verify=False)
+            response = requests.get(
+                feature_flag_url,
+                headers=headers,
+                timeout=APIConfig.DEFAULT_TIMEOUT
+            )
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            logging.error(f"Feature Flag API call failed (attempt {attempt + 1}): {e}")
+            logger.error(f"Feature Flag API call failed (attempt {attempt + 1}): {e}")
 
     return None
 
@@ -95,12 +97,9 @@ def update_flag(env_key, feature_key, update_value):
     }
     
     # Debug logging for request details (redacted & at DEBUG level)
-    logging.debug(f"Request URL: {url}")
-    logging.debug(f"Request Headers: {_sanitize_headers(headers)}")
-    logging.debug(f"Request Payload: {payload}")
-    print(f"DEBUG: Request URL: {url}")
-    print(f"DEBUG: Request Headers: {headers}")
-    print(f"DEBUG: Request Payload: {payload}")
+    logger.debug(f"Request URL: {url}")
+    logger.debug(f"Request Headers: {_sanitize_headers(headers)}")
+    logger.debug(f"Request Payload: {payload}")
 
     for attempt in range(APIConfig.MAX_RETRIES):
         try:
@@ -112,25 +111,23 @@ def update_flag(env_key, feature_key, update_value):
             )
             
             # Debug logging for response (at DEBUG level; redact cookies if present)
-            logging.debug(f"Response Status: {ld_response.status_code}")
-            logging.debug(f"Response Headers: {_sanitize_headers(dict(ld_response.headers))}")
-            logging.debug(f"Response Body: {ld_response.text}")
-            print(f"DEBUG: Response Status: {ld_response.status_code}")
-            print(f"DEBUG: Response Headers: {dict(ld_response.headers)}")
-            print(f"DEBUG: Response Body: {ld_response.text}")
+            logger.debug(f"Response Status: {ld_response.status_code}")
+            logger.debug(f"Response Headers: {_sanitize_headers(dict(ld_response.headers))}")
+            logger.debug(f"Response Body: {ld_response.text}")
             
             ld_response.raise_for_status()
-            print(f"✅ Success: Feature flag '{feature_key}' successfully {'Turned ON' if update_value else 'Turned OFF'}.")
+            logger.info(
+                f"Success: Feature flag '{feature_key}' {'turned ON' if update_value else 'turned OFF'}."
+            )
             return True
         except requests.exceptions.Timeout:
-            logging.error(f"Update Feature Flag API call timed out (attempt {attempt + 1})")
+            logger.error(f"Update Feature Flag API call timed out (attempt {attempt + 1})")
         except requests.exceptions.RequestException as e:
-            logging.error(f"Update Feature Flag API call failed (attempt {attempt + 1}): {e}")
+            logger.error(f"Update Feature Flag API call failed (attempt {attempt + 1}): {e}")
             # Log the full error details
-            logging.error(f"DEBUG: Full error details: {e}")
-            print(f"DEBUG: Full error details: {e}")
+            logger.error(f"Full error details: {e}")
 
-    print(f"❌ Error: Failed to update flag '{feature_key}' after {APIConfig.MAX_RETRIES} attempts.")
+    logger.error(f"Failed to update flag '{feature_key}' after {APIConfig.MAX_RETRIES} attempts.")
     return False
 
 def get_environments():
@@ -155,10 +152,10 @@ def get_environments():
                 environments.append(env.get("key", ""))
             return environments
         else:
-            print(f"Failed to get environments: {response.status_code} - {response.text}")
+            logger.error(f"Failed to get environments: {response.status_code} - {response.text}")
             return []
     except Exception as e:
-        print(f"Error getting environments: {e}")
+        logger.error(f"Error getting environments: {e}")
         return []
 
 def get_all_feature_flags():
@@ -191,16 +188,16 @@ def get_all_feature_flags():
             else:
                 url = None # No more pages
         except requests.exceptions.Timeout:
-            logging.error("API request timed out while fetching all flags")
+            logger.error("API request timed out while fetching all flags")
             break
         except requests.exceptions.RequestException as e:
-            logging.error(f"Error fetching all flags: {e}")
+            logger.error(f"Error fetching all flags: {e}")
             break
 
     flags_list = []
     for flag in all_flags_data:
-        # --- DEBUG: Print the raw environment data for a flag ---
-        print(f"DEBUG - Flag: {flag.get('key')}, Environments: {flag.get('environments')}")
+        # --- DEBUG: Log the raw environment data for a flag ---
+        logger.debug(f"Flag: {flag.get('key')}, Environments: {flag.get('environments')}")
         # --- END DEBUG ---
         environments = flag.get("environments", {})
         flags_list.append({

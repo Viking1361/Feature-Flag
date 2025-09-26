@@ -61,6 +61,14 @@ class ThemeManager:
             background=colors["background"]
         )
         
+        # Set defaults so any unspecified frames/labels inherit our theme bg/fg
+        style.configure("TFrame", background=colors["background"]) 
+        style.configure("TLabel", background=colors["background"], foreground=colors["text"]) 
+        style.configure("TNotebook", background=colors["background"]) 
+        # Avoid overriding TSeparator to prevent ttkbootstrap from recreating the element and
+        # throwing 'Duplicate element Horizontal.Separator.separator' on theme re-apply.
+        style.configure("TMenubutton", background=colors["surface"], foreground=colors["text"]) 
+        
         # Configure title label style
         style.configure(
             "Title.TLabel",
@@ -90,7 +98,66 @@ class ThemeManager:
             "Card.TFrame",
             background=colors["surface"],
             relief="flat",
-            borderwidth=1
+            borderwidth=0,
+            bordercolor=colors.get("border", colors["surface"])  # ttkbootstrap supports bordercolor
+        )
+
+        # Also flatten Labelframes that some cards may use internally
+        style.configure(
+            "TLabelframe",
+            background=colors["background"],
+            borderwidth=0
+        )
+        style.configure(
+            "Card.TLabelframe",
+            background=colors["background"],
+            borderwidth=0,
+            bordercolor=colors.get("border", colors["surface"]) 
+        )
+        style.configure(
+            "TLabelframe.Label",
+            background=colors["background"],
+            foreground=colors["text"]
+        )
+
+        # Improve input visibility (Entry, Combobox)
+        # Entry fields
+        style.configure(
+            "TEntry",
+            fieldbackground=colors.get("input_bg", colors["surface"]),
+            foreground=colors.get("input_fg", colors["text"]),
+            background=colors["surface"],
+            bordercolor=colors.get("border", colors["surface"])  # ttkbootstrap option
+        )
+        style.map(
+            "TEntry",
+            fieldbackground=[
+                ("disabled", colors["surface"]),
+                ("readonly", colors.get("input_bg", colors["surface"]))
+            ],
+            foreground=[
+                ("disabled", colors["text_secondary"]),
+                ("readonly", colors.get("input_fg", colors["text"]))
+            ]
+        )
+
+        # Combobox fields
+        style.configure(
+            "TCombobox",
+            fieldbackground=colors.get("input_bg", colors["surface"]),
+            foreground=colors.get("input_fg", colors["text"]),
+            background=colors["surface"],
+            bordercolor=colors.get("border", colors["surface"])  # ttkbootstrap option
+        )
+        style.map(
+            "TCombobox",
+            fieldbackground=[
+                ("readonly", colors.get("input_bg", colors["surface"]))
+            ],
+            foreground=[
+                ("disabled", colors["text_secondary"]),
+                ("readonly", colors.get("input_fg", colors["text"]))
+            ]
         )
 
     def get_current_theme(self):

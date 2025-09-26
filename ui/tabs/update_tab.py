@@ -11,6 +11,9 @@ from api_config.api_endpoints import FeatureFlagEndpoints, APIHeaders, APIConfig
 from shared.constants import UPDATE_ENVIRONMENT_OPTIONS, ENVIRONMENT_MAPPINGS
 from api_client import get_client
 
+# Module logger for this UI module
+logger = logging.getLogger(__name__)
+
 class UpdateTab:
     def __init__(self, parent, history_manager, theme_manager):
         self.parent = parent
@@ -23,16 +26,16 @@ class UpdateTab:
     def setup_ui(self):
         """Sets up the UI for the 'Update Feature Flag' tab with a modern card-based layout."""
         # --- Main container with enhanced spacing ---
-        main_container = ttk.Frame(self.parent, padding=25)
+        main_container = ttk.Frame(self.parent, padding=16)
         main_container.pack(fill="both", expand=True)
 
         # --- Enhanced Header Section ---
         header_container = ttk.Frame(main_container)
-        header_container.pack(fill="x", pady=(0, 25))
+        header_container.pack(fill="x", pady=(0, 12))
         
         # Title card with modern styling
-        title_card = ttk.Frame(header_container, style="Card.TFrame", padding=20)
-        title_card.pack(fill="x", pady=(0, 10))
+        title_card = ttk.Frame(header_container, style="Content.TFrame", padding=12)
+        title_card.pack(fill="x", pady=(0, 6))
         
         title_label = ttk.Label(
             title_card, 
@@ -55,12 +58,12 @@ class UpdateTab:
         content_container.pack(fill="both", expand=True)
         
         # Enhanced Configuration Card
-        config_card = ttk.Frame(content_container, style="Card.TFrame", padding=25)
-        config_card.pack(fill="x", pady=(0, 20))
+        config_card = ttk.Frame(content_container, style="Content.TFrame", padding=16)
+        config_card.pack(fill="x", pady=(0, 12))
         
         # Configuration header with modern styling
         config_header = ttk.Frame(config_card)
-        config_header.pack(fill="x", pady=(0, 20))
+        config_header.pack(fill="x", pady=(0, 10))
         
         config_title = ttk.Label(
             config_header,
@@ -89,11 +92,11 @@ class UpdateTab:
             font=("Segoe UI", 14, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        left_header.pack(anchor="w", pady=(0, 15))
+        left_header.pack(anchor="w", pady=(0, 8))
         
         # Feature Flag Key with enhanced styling
-        key_container = ttk.Frame(left_column, style="Card.TFrame", padding=15)
-        key_container.pack(fill="x", pady=(0, 15))
+        key_container = ttk.Frame(left_column, style="Content.TFrame", padding=10)
+        key_container.pack(fill="x", pady=(0, 8))
         
         key_label = ttk.Label(
             key_container, 
@@ -101,7 +104,7 @@ class UpdateTab:
             font=("Segoe UI", 12, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        key_label.pack(anchor="w", pady=(0, 8))
+        key_label.pack(anchor="w", pady=(0, 5))
         
         self.update_key_var = tk.StringVar()
         self.update_key_var.trace_add("write", lambda *args: self.reset_log())
@@ -115,8 +118,8 @@ class UpdateTab:
         self.update_key_entry.pack(fill="x")
 
         # Environment with enhanced styling
-        env_container = ttk.Frame(left_column, style="Card.TFrame", padding=15)
-        env_container.pack(fill="x", pady=(0, 10))
+        env_container = ttk.Frame(left_column, style="Content.TFrame", padding=10)
+        env_container.pack(fill="x", pady=(0, 6))
         
         env_label = ttk.Label(
             env_container, 
@@ -124,7 +127,7 @@ class UpdateTab:
             font=("Segoe UI", 12, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        env_label.pack(anchor="w", pady=(0, 8))
+        env_label.pack(anchor="w", pady=(0, 5))
         
         self.environment_entry = ttk.Combobox(
             env_container, 
@@ -134,7 +137,7 @@ class UpdateTab:
             height=8
         )
         self.environment_entry.set("DEV")
-        self.environment_entry.pack(fill="x", pady=(0, 8))
+        self.environment_entry.pack(fill="x", pady=(0, 5))
         
         # Enhanced helper text
         env_help = ttk.Label(
@@ -152,11 +155,11 @@ class UpdateTab:
             font=("Segoe UI", 14, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        right_header.pack(anchor="w", pady=(0, 15))
+        right_header.pack(anchor="w", pady=(0, 8))
         
         # PMC ID field with enhanced styling
-        pmcid_container = ttk.Frame(right_column, style="Card.TFrame", padding=15)
-        pmcid_container.pack(fill="x", pady=(0, 15))
+        pmcid_container = ttk.Frame(right_column, style="Content.TFrame", padding=10)
+        pmcid_container.pack(fill="x", pady=(0, 8))
         
         pmcid_label = ttk.Label(
             pmcid_container, 
@@ -164,7 +167,7 @@ class UpdateTab:
             font=("Segoe UI", 12, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        pmcid_label.pack(anchor="w", pady=(0, 8))
+        pmcid_label.pack(anchor="w", pady=(0, 5))
         
         self.pmcid_var = tk.StringVar()
         self.pmcid_entry = ttk.Entry(
@@ -172,7 +175,7 @@ class UpdateTab:
             textvariable=self.pmcid_var, 
             font=("Segoe UI", 11)
         )
-        self.pmcid_entry.pack(fill="x", pady=(0, 8))
+        self.pmcid_entry.pack(fill="x", pady=(0, 5))
         
         # Enhanced helper text for PMCID
         pmcid_help = ttk.Label(
@@ -184,8 +187,8 @@ class UpdateTab:
         pmcid_help.pack(anchor="w")
 
         # Site ID field with enhanced styling
-        siteid_container = ttk.Frame(right_column, style="Card.TFrame", padding=15)
-        siteid_container.pack(fill="x", pady=(0, 10))
+        siteid_container = ttk.Frame(right_column, style="Content.TFrame", padding=10)
+        siteid_container.pack(fill="x", pady=(0, 6))
         
         siteid_label = ttk.Label(
             siteid_container, 
@@ -193,7 +196,7 @@ class UpdateTab:
             font=("Segoe UI", 12, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        siteid_label.pack(anchor="w", pady=(0, 8))
+        siteid_label.pack(anchor="w", pady=(0, 5))
         
         self.siteid_var = tk.StringVar()
         self.siteid_entry = ttk.Entry(
@@ -201,7 +204,7 @@ class UpdateTab:
             textvariable=self.siteid_var, 
             font=("Segoe UI", 11)
         )
-        self.siteid_entry.pack(fill="x", pady=(0, 8))
+        self.siteid_entry.pack(fill="x", pady=(0, 5))
         
         # Enhanced helper text for Site ID
         siteid_help = ttk.Label(
@@ -214,16 +217,29 @@ class UpdateTab:
 
         # === ACTION BUTTONS SECTION ===
         action_container = ttk.Frame(config_card)
-        action_container.pack(fill="x", pady=(25, 0))
+        action_container.pack(fill="x", pady=(12, 0))
         
         # Action buttons with enhanced modern styling
-        action_frame = ttk.Frame(action_container, style="Card.TFrame", padding=15)
+        action_frame = ttk.Frame(action_container, style="Content.TFrame", padding=12)
         action_frame.pack(fill="x")
         
+        # Optional settings controls
+        options_container = ttk.Frame(action_frame)
+        options_container.pack(fill="x", pady=(0, 6))
+        ttk.Label(options_container, text="Default rule (fallthrough):").pack(anchor="w")
+        self.fallthrough_option_var = tk.StringVar(value="No change")
+        self.fallthrough_option_combo = ttk.Combobox(
+            options_container,
+            textvariable=self.fallthrough_option_var,
+            values=["No change", "True", "False"],
+            state="readonly"
+        )
+        self.fallthrough_option_combo.pack(anchor="w")
+
         # Centered button layout
         button_container = ttk.Frame(action_frame)
         button_container.pack(expand=True)
-        
+
         self.update_on_button = ttk.Button(
             button_container, 
             text="🟢 Turn ON", 
@@ -253,15 +269,15 @@ class UpdateTab:
 
         # === TWO-COLUMN LAYOUT: STATUS & API RESPONSE ===
         columns_container = ttk.Frame(content_container)
-        columns_container.pack(fill="both", expand=True, padx=10, pady=10)
+        columns_container.pack(fill="both", expand=True, padx=8, pady=6)
         
         # === LEFT COLUMN: UPDATE STATUS ===
-        left_column = ttk.Frame(columns_container, style="Card.TFrame", padding=20)
+        left_column = ttk.Frame(columns_container, style="Content.TFrame", padding=12)
         left_column.pack(side="left", fill="both", expand=True, padx=(0, 5))
         
         # Status header with modern styling
         status_header = ttk.Frame(left_column)
-        status_header.pack(fill="x", pady=(0, 20))
+        status_header.pack(fill="x", pady=(0, 10))
         
         status_title = ttk.Label(
             status_header,
@@ -277,7 +293,7 @@ class UpdateTab:
 
         # Loading indicator with spinner
         self.loading_frame = ttk.Frame(status_content)
-        self.loading_frame.pack(pady=10)
+        self.loading_frame.pack(pady=6)
         
         self.loading_spinner = ttk.Label(
             self.loading_frame,
@@ -285,7 +301,7 @@ class UpdateTab:
             font=("Segoe UI", 16),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        self.loading_spinner.pack(side="left", padx=(0, 10))
+        self.loading_spinner.pack(side="left", padx=(0, 6))
         
         self.update_loading_var = tk.StringVar()
         self.loading_label = ttk.Label(
@@ -307,15 +323,15 @@ class UpdateTab:
             font=("Segoe UI", 11),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        self.update_result_label.pack(pady=10, anchor="w")
+        self.update_result_label.pack(pady=6, anchor="w")
 
         # === RIGHT COLUMN: API RESPONSE DETAILS ===
-        right_column = ttk.Frame(columns_container, style="Card.TFrame", padding=20)
+        right_column = ttk.Frame(columns_container, style="Content.TFrame", padding=12)
         right_column.pack(side="right", fill="both", expand=True, padx=(5, 0))
         
         # API Response header
         response_header = ttk.Frame(right_column)
-        response_header.pack(fill="x", pady=(0, 20))
+        response_header.pack(fill="x", pady=(0, 10))
         
         response_title = ttk.Label(
             response_header,
@@ -341,10 +357,13 @@ class UpdateTab:
             font=("Consolas", 9),  # Slightly smaller font to fit more content
             wrap="none",  # No wrapping for better JSON formatting
             state="disabled",
-            bg=self.theme_manager.get_theme_config()["colors"]["surface"],
+            bg=self.theme_manager.get_theme_config()["colors"]["background"],
             fg=self.theme_manager.get_theme_config()["colors"]["text"],
             selectbackground=self.theme_manager.get_theme_config()["colors"]["primary"],
-            insertbackground=self.theme_manager.get_theme_config()["colors"]["text"]
+            insertbackground=self.theme_manager.get_theme_config()["colors"]["text"],
+            bd=0,
+            highlightthickness=0,
+            relief="flat"
         )
         
         # Enhanced scrollbar setup
@@ -369,11 +388,11 @@ class UpdateTab:
             messagebox.showwarning("Warning", "Please enter a feature flag key.")
             return
 
-        print(f"DEBUG: UPDATE Tab - Feature Key: {feature_key}")
-        print(f"DEBUG: UPDATE Tab - Environment: {environment}")
-        print(f"DEBUG: UPDATE Tab - Action: {'Enable' if enable else 'Disable'}")
-        print(f"DEBUG: UPDATE Tab - PMC ID: {pmcid}")
-        print(f"DEBUG: UPDATE Tab - Site ID: {siteid}")
+        logger.debug(f"UPDATE Tab - Feature Key: {feature_key}")
+        logger.debug(f"UPDATE Tab - Environment: {environment}")
+        logger.debug(f"UPDATE Tab - Action: {'Enable' if enable else 'Disable'}")
+        logger.debug(f"UPDATE Tab - PMC ID: {pmcid}")
+        logger.debug(f"UPDATE Tab - Site ID: {siteid}")
 
         # Show loading indicator
         self.loading_frame.pack(pady=10)
@@ -411,15 +430,35 @@ class UpdateTab:
             
             # If PMC ID is provided, use intelligent targeting
             if pmcid:
-                print(f"DEBUG: PMC ID provided, using intelligent targeting...")
+                logger.debug("PMC ID provided, using intelligent targeting...")
                 success, message, api_responses = self.update_flag_with_pmcid_targeting(feature_key, environment, pmcid, siteid, enable)
                 response_data["api_responses"] = api_responses
             else:
                 # Use standard flag toggle
-                print(f"DEBUG: No PMC ID provided, using standard flag toggle...")
+                logger.debug("No PMC ID provided, using standard flag toggle...")
                 success = update_flag(environment, feature_key, enable)
                 message = f"Flag '{feature_key}' {'enabled' if enable else 'disabled'} globally in {environment}"
                 response_data["api_responses"] = [{"operation": "standard_toggle", "success": success, "message": message}]
+            
+            # If user requested to set default rule (fallthrough) to True and we are enabling,
+            # apply a follow-up JSON Patch to set fallthrough even on the standard path.
+            try:
+                desired = ""
+                if getattr(self, 'fallthrough_option_var', None):
+                    desired = (self.fallthrough_option_var.get() or "").strip().lower()
+                if success and enable and desired in ("true", "false"):
+                    logger.debug("Applying fallthrough update after standard toggle (no PMC ID)...")
+                    flag_data_std = self.get_flag_configuration(feature_key)
+                    if flag_data_std:
+                        ft_success = self.update_flag_configuration(feature_key, flag_data_std, environment)
+                        response_data["api_responses"].append({
+                            "operation": "fallthrough_update",
+                            "success": ft_success
+                        })
+                        if not ft_success:
+                            logger.error("Failed to update fallthrough variation after standard toggle")
+            except Exception as e:
+                logger.exception(f"Exception applying fallthrough update after standard toggle: {str(e)}")
             
             # Update response data with results
             response_data["success"] = success
@@ -444,8 +483,8 @@ class UpdateTab:
                 # Update response box with detailed API data
                 self.update_response_box(response_data)
                 
-                print(f"DEBUG: SUCCESS - {success_message}{context_display}")
-                print(f"DEBUG: Details - {message}")
+                logger.info(f"Update success for {feature_key} in {environment}{context_display}")
+                logger.debug(f"Details - {message}")
                 # Minimal ASCII-only success audit log (no sensitive data)
                 try:
                     action = "on" if enable else "off"
@@ -465,7 +504,7 @@ class UpdateTab:
                 # Update response box with error details
                 self.update_response_box(response_data)
                 
-                print(f"DEBUG: FAILURE - {error_message}: {message}")
+                logger.error(f"Update failed for {feature_key} in {environment}: {message}")
                 
         except Exception as e:
             error_message = f"❌ Error: {str(e)}"
@@ -490,8 +529,7 @@ class UpdateTab:
             # Update response box with exception details
             self.update_response_box(error_response)
             
-            print(f"DEBUG: EXCEPTION - {error_message}")
-            logging.error(f"Error updating feature flag: {str(e)}")
+            logger.exception(f"Exception updating feature flag: {str(e)}")
         
         # Hide loading indicator and re-enable buttons
         self.loading_frame.pack_forget()
@@ -500,7 +538,7 @@ class UpdateTab:
 
     def update_flag_with_pmcid_targeting(self, feature_key, environment, pmcid, siteid, enable):
         """Update flag with intelligent PMC ID targeting"""
-        print(f"DEBUG: Starting intelligent targeting for PMC ID: {pmcid}")
+        logger.debug(f"Starting intelligent targeting for PMC ID: {pmcid}")
         
         api_responses = []
         
@@ -521,7 +559,7 @@ class UpdateTab:
                 api_responses.append({"operation": "environment_check", "success": False, "error": f"Environment '{actual_env}' not found in flag configuration"})
                 return False, f"Environment '{actual_env}' not found in flag configuration", api_responses
             
-            print(f"DEBUG: Current environment data retrieved for {actual_env}")
+            logger.debug(f"Current environment data retrieved for {actual_env}")
             
             # Check for existing PMC ID rules
             rules = env_data.get("rules", [])
@@ -531,14 +569,14 @@ class UpdateTab:
             except:
                 pmcid_int = pmcid  # Keep as string if conversion fails
             
-            print(f"DEBUG: === TWO-RULE SYSTEM ===")
-            print(f"DEBUG: Checking {len(rules)} existing rules for PMC ID: {pmcid_int}")
+            logger.debug("=== TWO-RULE SYSTEM ===")
+            logger.debug(f"Checking {len(rules)} existing rules for PMC ID: {pmcid_int}")
             
             # Debug: List all existing rules
             for i, rule in enumerate(rules):
                 rule_desc = rule.get("description", "No description")
                 rule_var = rule.get("variation", "Unknown")
-                print(f"DEBUG: Rule {i}: '{rule_desc}' (variation: {rule_var})")
+                logger.debug(f"Rule {i}: '{rule_desc}' (variation: {rule_var})")
             
             # Determine the variation index for enable/disable FIRST
             variations = flag_data.get("variations", [])
@@ -553,8 +591,8 @@ class UpdateTab:
                     disable_variation = i
             
             target_variation = enable_variation if enable else disable_variation
-            print(f"DEBUG: Target variation determined: {target_variation} ({'enable' if enable else 'disable'})")
-            print(f"DEBUG: Enable variation: {enable_variation}, Disable variation: {disable_variation}")
+            logger.debug(f"Target variation determined: {target_variation} ({'enable' if enable else 'disable'})")
+            logger.debug(f"Enable variation: {enable_variation}, Disable variation: {disable_variation}")
             
             # Look for the two standard PMC rules: enabled and disabled
             enabled_rule_index = -1
@@ -573,11 +611,11 @@ class UpdateTab:
                     if "pmcs enabled rule" in rule_description or rule_variation == enable_variation:
                         if enabled_rule_index == -1:  # Only take the first one we find
                             enabled_rule_index = i
-                            print(f"DEBUG: Found PMCs Enabled Rule at index {i} (description: '{rule.get('description', '')}')")
+                            logger.debug(f"Found PMCs Enabled Rule at index {i} (description: '{rule.get('description', '')}')")
                     elif "pmcs disabled rule" in rule_description or rule_variation == disable_variation:
                         if disabled_rule_index == -1:  # Only take the first one we find
                             disabled_rule_index = i
-                            print(f"DEBUG: Found PMCs Disabled Rule at index {i} (description: '{rule.get('description', '')}')")
+                            logger.debug(f"Found PMCs Disabled Rule at index {i} (description: '{rule.get('description', '')}')")
                 
                 # Check if this PMC ID is in any rule
                 for clause in clauses:
@@ -585,7 +623,7 @@ class UpdateTab:
                         clause_values = clause.get("values", [])
                         if pmcid_int in clause_values or str(pmcid_int) in clause_values:
                             current_pmcid_rule_index = i
-                            print(f"DEBUG: Found PMC ID {pmcid_int} in rule at index {i} (variation {rule_variation})")
+                            logger.debug(f"Found PMC ID {pmcid_int} in rule at index {i} (variation {rule_variation})")
                             break
                 
                 if current_pmcid_rule_index >= 0:
@@ -595,18 +633,18 @@ class UpdateTab:
             target_rule_index = enabled_rule_index if enable else disabled_rule_index
             source_rule_index = disabled_rule_index if enable else enabled_rule_index
             
-            print(f"DEBUG: Target rule index: {target_rule_index}, Source rule index: {source_rule_index}")
+            logger.debug(f"Target rule index: {target_rule_index}, Source rule index: {source_rule_index}")
             
             # Check if PMC is already in the correct rule
             if current_pmcid_rule_index == target_rule_index and target_rule_index >= 0:
-                print(f"DEBUG: PMC ID {pmcid_int} already in correct rule")
+                logger.debug(f"PMC ID {pmcid_int} already in correct rule")
                 action_description = f"PMC ID {pmcid_int} already {'enabled' if enable else 'disabled'} - no changes needed"
                 success = True
                 rule_to_apply = None
                 rule_index_to_update = -1
             elif current_pmcid_rule_index == -1 and target_rule_index == -1:
                 # No PMC rules exist yet - create the first standard rule
-                print(f"DEBUG: No PMC targeting rules exist yet, creating first standard rule")
+                logger.debug("No PMC targeting rules exist yet, creating first standard rule")
                 rule_to_apply = self.create_standard_pmc_rule(pmcid_int, target_variation, enable)
                 rule_index_to_update = -1
                 action_description = f"Created first PMC targeting rule: {'enabled' if enable else 'disabled'} with PMC {pmcid_int}"
@@ -620,7 +658,7 @@ class UpdateTab:
                 adjusted_target_rule_index = target_rule_index
                 
                 if current_pmcid_rule_index >= 0 and current_pmcid_rule_index != target_rule_index:
-                    print(f"DEBUG: Removing PMC ID {pmcid_int} from rule at index {current_pmcid_rule_index}")
+                    logger.debug(f"Removing PMC ID {pmcid_int} from rule at index {current_pmcid_rule_index}")
                     source_rule = rules[current_pmcid_rule_index].copy()
                     
                     # Remove PMC ID from the source rule
@@ -635,7 +673,7 @@ class UpdateTab:
                     
                     # SMART RULING: Delete empty rule instead of keeping it
                     if not remaining_pmcs:
-                        print(f"DEBUG: SMART RULING - Source rule will be empty, deleting entire rule at index {current_pmcid_rule_index}")
+                        logger.debug(f"SMART RULING - Source rule will be empty, deleting entire rule at index {current_pmcid_rule_index}")
                         # Get the actual rule ID (UUID) from the rule
                         source_rule_id = source_rule.get("_id")
                         # Use JSON Patch to remove the rule by index
@@ -643,88 +681,98 @@ class UpdateTab:
                             "op": "remove",
                             "path": f"/environments/{actual_env}/rules/{current_pmcid_rule_index}"
                         })
-                        print(f"DEBUG: Will remove rule at index: {current_pmcid_rule_index}")
+                        logger.debug(f"Will remove rule at index: {current_pmcid_rule_index}")
                         rule_deleted = True
                         
                         # Adjust target rule index if it comes after the deleted rule
                         if target_rule_index > current_pmcid_rule_index:
                             adjusted_target_rule_index = target_rule_index - 1
-                            print(f"DEBUG: Adjusted target rule index from {target_rule_index} to {adjusted_target_rule_index}")
-                    else:
-                        print(f"DEBUG: Source rule still has {len(remaining_pmcs)} PMC(s), updating rule")
-                        # Get the actual rule ID (UUID) from the rule
-                        source_rule_id = source_rule.get("_id")
-                        # Use JSON Patch to replace the rule at the specific index
-                        patches_needed.append({
-                            "op": "replace",
-                            "path": f"/environments/{actual_env}/rules/{current_pmcid_rule_index}",
-                            "value": source_rule
-                        })
-                        print(f"DEBUG: Will update rule at index: {current_pmcid_rule_index}")
-                
+                            logger.debug(f"Adjusted target rule index from {target_rule_index} to {adjusted_target_rule_index}")
                 # Step 2: Add to or create target rule
                 if adjusted_target_rule_index >= 0:
                     # Add to existing target rule
-                    print(f"DEBUG: Adding PMC ID {pmcid_int} to existing {'enabled' if enable else 'disabled'} rule at index {adjusted_target_rule_index}")
+                    logger.debug(f"Adding PMC ID {pmcid_int} to existing {'enabled' if enable else 'disabled'} rule at index {adjusted_target_rule_index}")
                     target_rule = rules[adjusted_target_rule_index].copy()
-                    
+
                     # Add PMC ID to the target rule
-                    for clause in target_rule["clauses"]:
+                    for clause in target_rule.get("clauses", []):
                         if clause.get("attribute") == "PmcId":
-                            if pmcid_int not in clause["values"]:
+                            if pmcid_int not in clause.get("values", []):
                                 clause["values"].append(pmcid_int)
                             break
-                    
+
                     rule_to_apply = target_rule
                     rule_index_to_update = adjusted_target_rule_index
-                    
+
                     if rule_deleted:
-                        action_description = f"SMART RULING: Deleted empty rule and moved PMC {pmcid_int} to {'enabled' if enable else 'disabled'} rule"
+                        action_description = f"Deleted empty rule and moved PMC {pmcid_int} to {'enabled' if enable else 'disabled'} rule"
                     else:
                         action_description = f"Moved PMC {pmcid_int} to {'enabled' if enable else 'disabled'} rule"
                 else:
                     # Create new standard rule
-                    print(f"DEBUG: Creating new standard {'enabled' if enable else 'disabled'} rule")
+                    logger.debug(f"Creating new standard {'enabled' if enable else 'disabled'} rule")
                     rule_to_apply = self.create_standard_pmc_rule(pmcid_int, target_variation, enable)
                     rule_index_to_update = -1
                     action_description = f"Created new {'enabled' if enable else 'disabled'} rule with PMC {pmcid_int}"
-                
+
                 additional_ops = patches_needed
-            
-            # Apply the changes via API using JSON Patch operations with user attribution
+
+            # Apply the changes via API using JSON Patch operations
             if rule_to_apply:
-                # Check if we have additional operations (for moving between rules)
-                additional_ops = locals().get('additional_ops', None)
-                success = self.update_flag_configuration(feature_key, flag_data, environment, rule_index_to_update, rule_to_apply, additional_ops)
+                success = self.update_flag_configuration(
+                    feature_key,
+                    flag_data,
+                    environment,
+                    rule_index_to_update,
+                    rule_to_apply,
+                    additional_ops
+                )
                 api_responses.append({
-                    "operation": "update_flag_config", 
-                    "success": success, 
-                    "rule_applied": rule_to_apply,
+                    "operation": "update_flag_config",
+                    "success": success,
                     "rule_index": rule_index_to_update,
                     "additional_operations": additional_ops
                 })
             else:
-                success = True  # No changes needed case
-                api_responses.append({"operation": "no_changes_needed", "success": True, "message": "PMC ID already in correct state"})
-            
+                success = True
+                api_responses.append({
+                    "operation": "no_changes_needed",
+                    "success": True,
+                    "message": "PMC ID already in correct state"
+                })
+
+                # If user requested to set default rule (fallthrough) to True and we are enabling,
+                # apply a follow-up JSON Patch to set fallthrough even when no rule changes are needed.
+                try:
+                    desired = ""
+                    if getattr(self, 'fallthrough_option_var', None):
+                        desired = (self.fallthrough_option_var.get() or "").strip().lower()
+                    if enable and desired in ("true", "false"):
+                        logger.debug("Applying fallthrough update in intelligent path (no changes needed case)...")
+                        ft_success = self.update_flag_configuration(feature_key, flag_data, environment)
+                        api_responses.append({
+                            "operation": "fallthrough_update",
+                            "success": ft_success
+                        })
+                        if not ft_success:
+                            logger.error("Failed to update fallthrough variation in intelligent path (no changes needed)")
+                except Exception as e:
+                    logger.exception(f"Exception applying fallthrough update in intelligent path: {str(e)}")
+
             if success:
-                print(f"DEBUG: Successfully applied targeting rule changes")
-                self.reset_update_fields()
                 return True, action_description, api_responses
             else:
                 api_responses.append({"operation": "final_result", "success": False, "error": "Failed to apply targeting rule changes"})
                 return False, "Failed to apply targeting rule changes", api_responses
                 
         except Exception as e:
-            print(f"DEBUG: Exception in intelligent targeting: {str(e)}")
+            logger.exception(f"Exception in intelligent targeting: {str(e)}")
             api_responses.append({"operation": "exception", "success": False, "error": str(e)})
             return False, f"Error in intelligent targeting: {str(e)}", api_responses
 
     def create_standard_pmc_rule(self, pmcid_int, target_variation, enable):
-        """Create a standard PMC targeting rule (either enabled or disabled)"""
-        rule_type = "enabled" if enable else "disabled"
-        description = f"PMCs {rule_type.title()} Rule"
-        
+        """Create a standard PMC rule dict for enabled/disabled state."""
+        description = "PMCs Enabled Rule" if enable else "PMCs Disabled Rule"
         new_rule = {
             "variation": target_variation,
             "description": description,
@@ -738,8 +786,7 @@ class UpdateTab:
             ],
             "trackEvents": True
         }
-        
-        print(f"DEBUG: Created standard rule: {description} with PMC {pmcid_int}")
+        logger.debug(f"Created standard rule: {description} with PMC {pmcid_int}")
         return new_rule
 
     def get_flag_configuration(self, feature_key):
@@ -747,116 +794,199 @@ class UpdateTab:
         try:
             url = URLBuilder.build_flag_url(PROJECT_KEY, feature_key)
             headers = APIHeaders.get_launchdarkly_headers(LAUNCHDARKLY_API_KEY)
-            
-            print(f"DEBUG: Fetching flag configuration from: {url}")
+            logger.debug(f"Fetching flag configuration from: {url}")
             
             response = requests.get(url, headers=headers, timeout=APIConfig.DEFAULT_TIMEOUT)
             
             if response.status_code == 200:
                 flag_data = response.json()
-                print(f"DEBUG: Successfully retrieved flag configuration")
+                logger.info("Successfully retrieved flag configuration")
                 return flag_data
             else:
-                print(f"DEBUG: Failed to get flag configuration: {response.status_code} - {response.text}")
+                logger.error(f"Failed to get flag configuration: {response.status_code}")
                 return None
                 
         except Exception as e:
-            print(f"DEBUG: Exception getting flag configuration: {str(e)}")
+            logger.exception(f"Exception getting flag configuration: {str(e)}")
             return None
 
     def update_flag_configuration(self, feature_key, flag_data, environment, rule_index_to_update=-1, rule_to_apply=None, additional_operations=None):
         """Update flag configuration in LaunchDarkly using JSON Patch operations with user attribution"""
         from shared.user_session import get_api_comment
-        
         try:
             url = URLBuilder.build_flag_url(PROJECT_KEY, feature_key)
             headers = APIHeaders.get_launchdarkly_headers(LAUNCHDARKLY_API_KEY)
-            
             actual_env = ENVIRONMENT_MAPPINGS.get(environment, environment)
-            
-            # Build JSON Patch operations (like the working checkpoint version)
+
+            # Build JSON Patch operations
             patch_operations = []
-            
+
+            # Determine boolean variation indices for default rule (fallthrough)
+            true_index = 0
+            false_index = 1
+            try:
+                variations = flag_data.get("variations", [])
+                for i, v in enumerate(variations):
+                    if v.get("value") is True:
+                        true_index = i
+                    elif v.get("value") is False:
+                        false_index = i
+            except Exception:
+                # Fallback to defaults if variations are unexpected
+                pass
+
             # Ensure flag is turned ON
             patch_operations.append({
                 "op": "replace",
                 "path": f"/environments/{actual_env}/on",
                 "value": True
             })
-            
+
+            # Optionally set default rule (fallthrough) to True/False based on UI selection
+            try:
+                desired = ""
+                if getattr(self, 'fallthrough_option_var', None):
+                    desired = (self.fallthrough_option_var.get() or "").strip().lower()
+                if desired in ("true", "false"):
+                    desired_index = true_index if desired == "true" else false_index
+                    envs = flag_data.get("environments", {})
+                    env_obj = envs.get(actual_env, {}) if isinstance(envs, dict) else {}
+                    fallthrough_obj = env_obj.get("fallthrough", {}) if isinstance(env_obj, dict) else {}
+                    if isinstance(fallthrough_obj, dict) and "variation" in fallthrough_obj:
+                        logger.debug(f"Fallthrough uses 'variation' - patching /fallthrough/variation to {desired}")
+                        patch_operations.append({
+                            "op": "replace",
+                            "path": f"/environments/{actual_env}/fallthrough/variation",
+                            "value": desired_index
+                        })
+                    else:
+                        # Some flags (e.g., migration) use 'rollout' in fallthrough. Replace entire fallthrough with a rollout
+                        # that serves 100% of the selected variation.
+                        logger.debug(f"Fallthrough not in 'variation' form - replacing entire fallthrough with rollout 100% {desired}")
+                        patch_operations.append({
+                            "op": "replace",
+                            "path": f"/environments/{actual_env}/fallthrough",
+                            "value": {
+                                "rollout": {
+                                    "variations": [
+                                        {"variation": desired_index, "weight": 100000}
+                                    ],
+                                    "contextKind": "user"
+                                }
+                            }
+                        })
+                    # Also set offVariation so that when the flag is OFF, it serves the selected variation
+                    logger.debug(f"Patching /offVariation to index {desired_index} ({desired})")
+                    patch_operations.append({
+                        "op": "replace",
+                        "path": f"/environments/{actual_env}/offVariation",
+                        "value": desired_index
+                    })
+            except Exception as e:
+                # If UI var not present or structure unexpected, skip this optional change
+                logger.debug(f"Skipping optional fallthrough update due to: {e}")
+
             # Add any additional operations first (like removing from old rules)
             if additional_operations:
                 patch_operations.extend(additional_operations)
-            
-            if rule_index_to_update >= 0 and rule_to_apply:
-                # Update existing rule
-                print(f"DEBUG: Creating patch to update existing rule at index {rule_index_to_update}")
+
+            # Update existing rule or add a new one
+            if rule_to_apply is not None and rule_index_to_update >= 0:
+                logger.debug(f"Creating patch to update existing rule at index {rule_index_to_update}")
                 patch_operations.append({
                     "op": "replace",
                     "path": f"/environments/{actual_env}/rules/{rule_index_to_update}",
                     "value": rule_to_apply
                 })
-            elif rule_to_apply:
-                # Add new rule
-                print(f"DEBUG: Creating patch to add new rule")
+            elif rule_to_apply is not None:
+                logger.debug("Creating patch to add new rule")
                 patch_operations.append({
                     "op": "add",
                     "path": f"/environments/{actual_env}/rules/-",
                     "value": rule_to_apply
                 })
-            
-            print(f"DEBUG: Updating flag configuration at: {url}")
-            print(f"DEBUG: JSON Patch operations: {json.dumps(patch_operations, indent=2)}")
-            
-            # Add user attribution comment to the patch
-            patch_operations.append({
-                "op": "replace", 
-                "path": f"/environments/{actual_env}/comment",
-                "value": get_api_comment(f"Flag configuration update for {feature_key}")
-            })
-            
-            response = requests.patch(url, headers=headers, json=patch_operations, timeout=APIConfig.DEFAULT_TIMEOUT)
-            
+
+            # Prepare payload with comment per LaunchDarkly docs (Updates with comments)
+            payload = {
+                "comment": get_api_comment(f"Flag configuration update for {feature_key}"),
+                "patch": patch_operations
+            }
+
+            logger.debug(f"Updating flag configuration at: {url}")
+            logger.debug(f"JSON Patch payload: {json.dumps(payload, indent=2)}")
+
+            response = requests.patch(url, headers=headers, json=payload, timeout=APIConfig.DEFAULT_TIMEOUT)
+
             if response.status_code in [200, 204]:
-                print(f"DEBUG: Successfully updated flag configuration")
+                logger.info("Successfully updated flag configuration")
                 self.reset_update_fields()
                 return True
             else:
-                print(f"DEBUG: Failed to update flag configuration: {response.status_code} - {response.text}")
+                try:
+                    resp_text = response.text
+                except Exception:
+                    resp_text = ""
+                # Sanitize response text to ASCII-only for CI compatibility
+                try:
+                    resp_text_ascii = resp_text.encode("ascii", "ignore").decode("ascii")
+                except Exception:
+                    resp_text_ascii = ""
+                logger.error(f"Failed to update flag configuration: {response.status_code} - {resp_text_ascii}")
                 return False
-                
+
         except Exception as e:
-            print(f"DEBUG: Exception updating flag configuration: {str(e)}")
+            logger.exception(f"Exception updating flag configuration: {str(e)}")
             return False
-
-    def reset_update_fields(self):
-        """Reset update form fields"""
-        self.update_key_var.set("")
-        self.environment_entry.set("DEV")
-        self.pmcid_var.set("")
-        self.siteid_var.set("")
-        self.update_result_label.config(text="")
-        self.update_response_box(None)
-        self.reset_log()
-
-    def animate_spinner(self):
-        """Animate the loading spinner"""
-        spinner_chars = ["⏳", "⌛", "⏳", "⌛"]
-        if hasattr(self, 'spinner_index'):
-            self.spinner_index = (self.spinner_index + 1) % len(spinner_chars)
-        else:
-            self.spinner_index = 0
-        
-        self.loading_spinner.config(text=spinner_chars[self.spinner_index])
-        
-        # Continue animation if loading frame is visible
-        if self.loading_frame.winfo_viewable():
-            self.parent.after(500, self.animate_spinner)
 
     def reset_log(self):
         """Reset loading text"""
         self.update_loading_var.set("")
         self.loading_frame.pack_forget()
+    
+    def reset_update_fields(self):
+        """Reset input fields and UI state for the Update tab."""
+        try:
+            # Reset input fields
+            self.update_key_var.set("")
+            self.environment_entry.set("DEV")
+            self.pmcid_var.set("")
+            self.siteid_var.set("")
+
+            # Reset status labels and loading UI
+            self.update_result_label.config(text="")
+            self.update_loading_var.set("")
+            self.loading_frame.pack_forget()
+
+            # Clear API response box
+            self.update_response_box(None)
+
+            # Re-enable action buttons
+            self.update_on_button.config(state="normal")
+            self.update_off_button.config(state="normal")
+
+            logger.debug("Update tab fields reset")
+        except Exception as e:
+            logger.exception(f"Error resetting update fields: {e}")
+
+    def animate_spinner(self):
+        """Animate the loading spinner while the loading frame is visible."""
+        try:
+            # Initialize spinner state
+            if not hasattr(self, "_spinner_index"):
+                self._spinner_index = 0
+            spinner_chars = "|/-\\"
+
+            # Only animate if loading frame is visible
+            if self.loading_frame.winfo_ismapped():
+                char = spinner_chars[self._spinner_index % len(spinner_chars)]
+                self.loading_spinner.config(text=char)
+                self._spinner_index += 1
+                self.parent.after(100, self.animate_spinner)
+            else:
+                # Reset icon when not animating
+                self.loading_spinner.config(text="⏳")
+        except Exception as e:
+            logger.debug(f"Spinner animation stopped: {e}")
 
     def update_response_box(self, response_data):
         """Update the response text box with formatted API response data (summary + raw)"""

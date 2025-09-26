@@ -20,30 +20,37 @@ THEMES = {
             "sidebar": "#f8f9fa",
             "sidebar_hover": "#e9ecef",
             "sidebar_active": "#007bff",
-            "sidebar_active_text": "#ffffff"
+            "sidebar_active_text": "#ffffff",
+            # Inputs
+            "input_bg": "#ffffff",
+            "input_fg": "#212529"
         }
     },
     "dark": {
         "name": "Dark",
         "theme": "darkly",
         "colors": {
-            "primary": "#3b82f6",
-            "secondary": "#6b7280",
+            # Higher-contrast dark palette inspired by GitHub Dark
+            "primary": "#60a5fa",          # slightly lighter blue for visibility
+            "secondary": "#94a3b8",
             "success": "#10b981",
             "danger": "#ef4444",
             "warning": "#f59e0b",
             "info": "#06b6d4",
             "light": "#374151",
-            "dark": "#111827",
-            "background": "#111827",
-            "surface": "#1f2937",
-            "text": "#e5e7eb",
-            "text_secondary": "#9ca3af",
-            "border": "#374151",
-            "sidebar": "#0f172a",
-            "sidebar_hover": "#1e293b",
-            "sidebar_active": "#3b82f6",
-            "sidebar_active_text": "#ffffff"
+            "dark": "#0d1117",
+            "background": "#0d1117",       # app background
+            "surface": "#0d1117",          # card/background surface = background for flatter look
+            "text": "#e6edf3",             # primary text
+            "text_secondary": "#cbd5e1",    # secondary text
+            "border": "#30363d",            # subtle border with contrast
+            "sidebar": "#0d1117",          # sidebar base = background to remove navy band
+            "sidebar_hover": "#161b22",     # subtle hover
+            "sidebar_active": "#60a5fa",
+            "sidebar_active_text": "#ffffff",
+            # Inputs
+            "input_bg": "#1f2937",
+            "input_fg": "#e6edf3"
         }
     }
 } 

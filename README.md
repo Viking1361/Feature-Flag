@@ -19,7 +19,7 @@ FeatureFlag/
 │       ├── get_tab.py        # 📋 Get Feature Flag tab
 │       ├── update_tab.py     # ⚙️ Update Feature Flag tab
 │       ├── create_tab.py     # ➕ Create Feature Flag tab
-│       ├── view_tab.py       # 📊 Feature Flags List tab
+│       ├── enhanced_view_tab.py  # 📊 Feature Flags List (Enhanced View) tab
 │       └── log_tab.py        # 📝 Log Viewer tab
 ├── api_config/               # ⚙️ API Configuration Package
 │   ├── __init__.py
@@ -145,7 +145,7 @@ python main.py
 - Environment and default value settings
 - API integration with LaunchDarkly
 
-### **View Tab (`view_tab.py`)**
+### **View Tab (`enhanced_view_tab.py`)**
 - Browse all feature flags
 - Search and filtering capabilities
 - Pagination for large datasets
@@ -318,14 +318,14 @@ A comprehensive desktop application for managing LaunchDarkly feature flags with
 
 ### For Development
 ```bash
-git clone https://github.com/YOUR-USERNAME/feature-flag-manager.git
-cd feature-flag-manager
+git clone https://github.com/Viking1361/Feature-Flag.git
+cd Feature-Flag
 pip install -r requirements.txt
 python main.py
 ```
 
 ### For End Users
-Download the latest executable from [Releases](https://github.com/YOUR-USERNAME/feature-flag-manager/releases)
+Download the latest executable from [Releases](https://github.com/Viking1361/Feature-Flag/releases)
 
 ## 🔧 Configuration
 
@@ -354,7 +354,7 @@ Download the latest executable from [Releases](https://github.com/YOUR-USERNAME/
 3. Update the URLs in `version.py`
 
 ### Step 2: Enable GitHub Actions
-The project includes automated build workflows:
+The project includes an automated Windows build workflow (`.github/workflows/release.yml`):
 - **Automatic builds** on version tags (v1.0.0, v1.0.1, etc.)
 - **Executable creation** using PyInstaller
 - **Release publishing** with auto-generated release notes

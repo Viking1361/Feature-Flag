@@ -26,6 +26,8 @@ HISTORY_FILE = os.environ.get("HISTORY_FILE", "autocomplete_history.json")
 LAUNCHDARKLY_API_KEY = os.environ.get("LAUNCHDARKLY_API_KEY", "")
 PROJECT_KEY = os.environ.get("PROJECT_KEY", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "Admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "ia1")
 
 # 2) Try to load optional root-level config.py without creating a hard import dependency
 try:
@@ -37,6 +39,8 @@ try:
         LOG_FILE = getattr(cfg, "LOG_FILE", LOG_FILE)
         HISTORY_FILE = getattr(cfg, "HISTORY_FILE", HISTORY_FILE)
         GITHUB_TOKEN = getattr(cfg, "GITHUB_TOKEN", GITHUB_TOKEN)
+        ADMIN_USERNAME = getattr(cfg, "ADMIN_USERNAME", ADMIN_USERNAME)
+        ADMIN_PASSWORD = getattr(cfg, "ADMIN_PASSWORD", ADMIN_PASSWORD)
 except Exception:
     # Safe fallback if config.py isn't available
     pass
@@ -68,6 +72,8 @@ try:
                     LOG_FILE = getattr(cfg_local, "LOG_FILE", LOG_FILE)
                     HISTORY_FILE = getattr(cfg_local, "HISTORY_FILE", HISTORY_FILE)
                     GITHUB_TOKEN = getattr(cfg_local, "GITHUB_TOKEN", GITHUB_TOKEN)
+                    ADMIN_USERNAME = getattr(cfg_local, "ADMIN_USERNAME", ADMIN_USERNAME)
+                    ADMIN_PASSWORD = getattr(cfg_local, "ADMIN_PASSWORD", ADMIN_PASSWORD)
                     break
         except Exception:
             continue
@@ -115,10 +121,51 @@ try:
                 LOG_FILE = data.get("LOG_FILE", LOG_FILE)
                 HISTORY_FILE = data.get("HISTORY_FILE", HISTORY_FILE)
                 GITHUB_TOKEN = data.get("GITHUB_TOKEN", GITHUB_TOKEN)
+                ADMIN_USERNAME = data.get("ADMIN_USERNAME", ADMIN_USERNAME)
+                ADMIN_PASSWORD = data.get("ADMIN_PASSWORD", ADMIN_PASSWORD)
                 break
         except Exception:
             # Ignore JSON errors and try the next candidate
             continue
+except Exception:
+    pass
+
+# 5) Ensure default paths are writable on Windows
+try:
+    is_windows = os.name == "nt"
+    # If running as a frozen EXE or using default relative names, prefer LocalAppData
+    prefer_appdata = getattr(sys, "frozen", False)
+
+    if is_windows:
+        local = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        app_dir = Path(local) / "FeatureFlag"
+        try:
+            app_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # If unable to create, fallback to CWD for relative paths
+            app_dir = Path.cwd()
+
+        def _resolve_path(p: str, default_names: tuple[str, ...]) -> str:
+            try:
+                if not p:
+                    return p
+                p_path = Path(str(p))
+                # Keep absolute or network paths as-is
+                if p_path.is_absolute():
+                    return str(p_path)
+                base = p_path.name
+                # If running frozen, redirect any relative path to app_dir
+                if prefer_appdata:
+                    return str(app_dir / base)
+                # If not frozen, only redirect known default filenames
+                if base.lower() in default_names:
+                    return str(app_dir / base)
+                return str(p_path)
+            except Exception:
+                return p
+
+        LOG_FILE = _resolve_path(LOG_FILE, ("feature_flag.log",))
+        HISTORY_FILE = _resolve_path(HISTORY_FILE, ("autocomplete_history.json",))
 except Exception:
     pass
 
@@ -128,3 +175,5 @@ PROJECT_KEY = str(PROJECT_KEY) if PROJECT_KEY is not None else ""
 LOG_FILE = str(LOG_FILE) if LOG_FILE is not None else "feature_flag.log"
 HISTORY_FILE = str(HISTORY_FILE) if HISTORY_FILE is not None else "autocomplete_history.json"
 GITHUB_TOKEN = str(GITHUB_TOKEN) if GITHUB_TOKEN is not None else ""
+ADMIN_USERNAME = str(ADMIN_USERNAME) if ADMIN_USERNAME is not None else "Admin"
+ADMIN_PASSWORD = str(ADMIN_PASSWORD) if ADMIN_PASSWORD is not None else "ia1"

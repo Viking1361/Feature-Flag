@@ -46,7 +46,7 @@ class LogTab:
         controls_container.pack(fill="x", pady=(0, 25))
         
         # Controls card
-        controls_frame = ttk.Frame(controls_container, style="Card.TFrame")
+        controls_frame = ttk.Frame(controls_container, style="Content.TFrame")
         controls_frame.pack(fill="x", padx=5)
         
         # Controls header
@@ -141,7 +141,7 @@ class LogTab:
         log_display_container.pack(fill="both", expand=True)
         
         # Log display card
-        log_display_frame = ttk.Frame(log_display_container, style="Card.TFrame")
+        log_display_frame = ttk.Frame(log_display_container, style="Content.TFrame")
         log_display_frame.pack(fill="both", expand=True, padx=5)
         
         # Log display header
