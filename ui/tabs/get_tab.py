@@ -612,6 +612,21 @@ class GetTab:
         logger.debug("No rule match found")
         return False
 
+    def get_variation_value(self, variation_index, flag_data):
+        """Return the variation value for the given index from the flag data.
+        Safely handles out-of-range indexes and missing fields.
+        """
+        try:
+            variations = flag_data.get("variations", [])
+            if isinstance(variation_index, int) and 0 <= variation_index < len(variations):
+                return variations[variation_index].get("value")
+            # Unknown index
+            return None
+        except Exception as e:
+            # Debug-only to avoid noisy UI; keep ASCII-only
+            logger.debug(f"get_variation_value error: {e}")
+            return None
+
     def display_flag_status(self, flag_data):
         """Display flag status in a simple, clean format"""
         key = flag_data.get("key", "")
