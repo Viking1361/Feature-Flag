@@ -82,7 +82,7 @@ ENVIRONMENT_MAPPINGS = {
     "DEV": "onesite-general-dev",
     "OCRT": "onesite-general-ocrt",
     "SAT": "onesite-general-sat",
-    "PROD": "onesite-general-prod-us"
+    "PROD": "onesite-gen-prod"
 }
 
 # Environment Display Names
