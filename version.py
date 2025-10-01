@@ -2,8 +2,8 @@
 Version management for Feature Flag Manager
 """
 
-__version__ = "1.0.12"
-__build_date__ = "2025-09-30"   
+__version__ = "1.0.13"
+__build_date__ = "2025-10-01"   
 __author__ = "Feature Flag Team"
 
 # Update configuration - REPLACE WITH YOUR GITHUB REPOSITORY
