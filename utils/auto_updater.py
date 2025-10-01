@@ -11,6 +11,7 @@ import requests
 import threading
 import subprocess
 import tempfile
+import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 import tkinter as tk
@@ -395,24 +396,171 @@ class AutoUpdater:
                 
                 progress_dialog.destroy()
                 
-                # Show installation dialog
-                result = messagebox.askyesno(
+                # Offer install options
+                install_now = messagebox.askyesno(
                     "Install Update",
-                    f"Update downloaded successfully!\n\n"
-                    f"The application will close and the new version will be installed.\n"
-                    f"Continue with installation?",
+                    "Update downloaded successfully.\n\n"
+                    "Do you want to install it now?",
                     icon="question"
                 )
-                
-                if result:
-                    # Launch installer and exit current application
-                    subprocess.Popen([temp_path])
-                    sys.exit(0)
+
+                if install_now:
+                    try:
+                        # Offer in-place replace if running as packaged EXE on Windows
+                        can_replace = (os.name == "nt" and getattr(sys, "frozen", False))
+                        replace_in_place = False
+                        if can_replace:
+                            replace_in_place = messagebox.askyesno(
+                                "Installation Option",
+                                "Replace the current EXE in place and restart now?\n\n"
+                                "Yes = Safely replace FeatureFlagManager.exe and relaunch.\n"
+                                "No  = Choose another install option.",
+                                icon="question"
+                            )
+
+                        if replace_in_place and can_replace:
+                            try:
+                                target_exe = Path(sys.executable)
+                                dest_dir = target_exe.parent
+                                stem = target_exe.stem
+                                suffix = target_exe.suffix or ".exe"
+                                new_exe = dest_dir / f"{stem}-new{suffix}"
+                                backup_exe = dest_dir / f"{stem}-backup{suffix}"
+
+                                # Copy downloaded file to -new next to current EXE
+                                try:
+                                    shutil.copy2(temp_path, new_exe)
+                                    logger.info(f"Updater: prepared new EXE at {new_exe}")
+                                except Exception as copy_err:
+                                    logger.error(f"Updater: failed to stage new EXE: {copy_err}")
+                                    # Fallback to running from temp
+                                    subprocess.Popen([temp_path])
+                                    sys.exit(0)
+
+                                # Create swap script in destination directory
+                                script_name = f"ffm_swap_{int(time.time())}.cmd"
+                                script_path = dest_dir / script_name
+                                bat = (
+                                    "@echo off\r\n"
+                                    "setlocal\r\n"
+                                    f"set \"TARGET={str(target_exe)}\"\r\n"
+                                    f"set \"NEW={str(new_exe)}\"\r\n"
+                                    f"set \"BACKUP={str(backup_exe)}\"\r\n"
+                                    ":wait\r\n"
+                                    "move /y \"%TARGET%\" \"%BACKUP%\" >nul 2>&1\r\n"
+                                    "if errorlevel 1 (\r\n"
+                                    "  timeout /t 1 /nobreak >nul\r\n"
+                                    "  goto wait\r\n"
+                                    ")\r\n"
+                                    "move /y \"%NEW%\" \"%TARGET%\" >nul 2>&1\r\n"
+                                    "start \"\" \"%TARGET%\"\r\n"
+                                    "del /f /q \"%BACKUP%\" >nul 2>&1\r\n"
+                                    "del /f /q \"%~f0\" >nul 2>&1\r\n"
+                                    "endlocal\r\n"
+                                )
+                                try:
+                                    with open(script_path, "w", encoding="utf-8") as f:
+                                        f.write(bat)
+                                    logger.info(f"Updater: wrote swap script {script_path}")
+                                except Exception as werr:
+                                    logger.error(f"Updater: failed to write swap script: {werr}")
+                                    subprocess.Popen([temp_path])
+                                    sys.exit(0)
+
+                                # Inform user and launch swap script
+                                messagebox.showinfo(
+                                    "Installing Update",
+                                    "The application will close and restart with the new version."
+                                )
+                                try:
+                                    subprocess.Popen(["cmd.exe", "/c", str(script_path)])
+                                except Exception as perr:
+                                    logger.error(f"Updater: failed to start swap script: {perr}")
+                                    # Fallback to temp
+                                    subprocess.Popen([temp_path])
+                                finally:
+                                    # Exit current app so the script can replace the EXE
+                                    try:
+                                        os.unlink(temp_path)
+                                    except Exception:
+                                        pass
+                                    sys.exit(0)
+
+                            except Exception as repl_err:
+                                logger.error(f"Updater: in-place replace error: {repl_err}")
+                                # Fallback to side-by-side/temporary path below
+
+                        # If not replacing in place, ask whether to save side-by-side with version suffix (recommended)
+                        side_by_side = messagebox.askyesno(
+                            "Installation Option",
+                            "Save the new EXE next to your current one with a versioned name?\n\n"
+                            "Yes = Save as FeatureFlagManager-v<version>.exe and launch it.\n"
+                            "No  = Just run the downloaded EXE from the temporary folder.",
+                            icon="question"
+                        )
+
+                        if side_by_side:
+                            # Determine destination directory (next to current EXE if frozen)
+                            try:
+                                if getattr(sys, "frozen", False):
+                                    dest_dir = Path(sys.executable).parent
+                                else:
+                                    dest_dir = Path.cwd()
+                            except Exception:
+                                dest_dir = Path.cwd()
+
+                            version_str = str(version_info.get("version", "")) or "unknown"
+                            dest_name = f"FeatureFlagManager-v{version_str}.exe"
+                            dest_path = dest_dir / dest_name
+
+                            # Copy downloaded EXE next to current application
+                            try:
+                                shutil.copy2(temp_path, dest_path)
+                                logger.info(f"Updater: saved new EXE to {dest_path}")
+                            except Exception as copy_err:
+                                logger.error(f"Updater: failed to save EXE to {dest_path}: {copy_err}")
+                                # Fallback to running from temp
+                                subprocess.Popen([temp_path])
+                                sys.exit(0)
+
+                            # Ask to launch the new side-by-side EXE
+                            launch_new = messagebox.askyesno(
+                                "Launch New Version",
+                                f"Saved: {dest_path}\n\nLaunch the new version now?",
+                                icon="question"
+                            )
+                            if launch_new:
+                                try:
+                                    subprocess.Popen([str(dest_path)])
+                                except Exception as e:
+                                    logger.error(f"Updater: failed to launch new EXE: {e}")
+                                finally:
+                                    # Exit current app regardless if launch attempted
+                                    sys.exit(0)
+                            else:
+                                # Keep current app running; remove temp file
+                                try:
+                                    os.unlink(temp_path)
+                                except Exception:
+                                    pass
+                                messagebox.showinfo("Update Saved", f"New version saved to:\n{dest_path}")
+                        else:
+                            # Run from temp as a one-off
+                            subprocess.Popen([temp_path])
+                            sys.exit(0)
+                    except Exception as install_err:
+                        logger.error(f"Updater: install flow error: {install_err}")
+                        # Fallback to running from temp
+                        try:
+                            subprocess.Popen([temp_path])
+                        except Exception:
+                            pass
+                        sys.exit(0)
                 else:
-                    # Clean up temp file
+                    # Clean up temp file if user declined
                     try:
                         os.unlink(temp_path)
-                    except:
+                    except Exception:
                         pass
                 
             except Exception as e:
