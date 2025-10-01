@@ -792,6 +792,10 @@ class UpdateTab:
     def get_flag_configuration(self, feature_key):
         """Get current flag configuration from LaunchDarkly"""
         try:
+            # Validate configuration before constructing URL
+            if not PROJECT_KEY or not LAUNCHDARKLY_API_KEY:
+                logger.error("Missing LaunchDarkly configuration (PROJECT_KEY or API key). Cannot fetch flag configuration.")
+                return None
             url = URLBuilder.build_flag_url(PROJECT_KEY, feature_key)
             headers = APIHeaders.get_launchdarkly_headers(LAUNCHDARKLY_API_KEY)
             logger.debug(f"Fetching flag configuration from: {url}")
@@ -816,6 +820,10 @@ class UpdateTab:
         try:
             url = URLBuilder.build_flag_url(PROJECT_KEY, feature_key)
             headers = APIHeaders.get_launchdarkly_headers(LAUNCHDARKLY_API_KEY)
+            # Validate configuration before making request
+            if not PROJECT_KEY or not LAUNCHDARKLY_API_KEY:
+                logger.error("Missing LaunchDarkly configuration (PROJECT_KEY or API key). Cannot update flag configuration.")
+                return False
             actual_env = ENVIRONMENT_MAPPINGS.get(environment, environment)
 
             # Build JSON Patch operations

@@ -441,6 +441,11 @@ class GetTab:
         # Environment mapping
         actual_env = ENVIRONMENT_MAPPINGS.get(environment, environment)
         
+        # Validate configuration before constructing URL
+        if not PROJECT_KEY or not LAUNCHDARKLY_API_KEY:
+            logging.error("Missing LaunchDarkly configuration (PROJECT_KEY or API key). Cannot get feature flag status.")
+            return None
+
         # Build the API URL
         url = f"{LAUNCHDARKLY_BASE_URL}/flags/{PROJECT_KEY}/{feature_key}"
         

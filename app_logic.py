@@ -76,6 +76,13 @@ def update_flag(env_key, feature_key, update_value):
 
     api_key = LAUNCHDARKLY_API_KEY
     project_key = PROJECT_KEY
+    # Validate configuration early to prevent malformed URLs
+    if not api_key:
+        logger.error("LaunchDarkly API key is not configured. Set LAUNCHDARKLY_API_KEY via environment or config.")
+        return False
+    if not project_key:
+        logger.error("LaunchDarkly PROJECT_KEY is not configured. Set PROJECT_KEY via environment or config.")
+        return False
     operation = f"Flag {'enabled' if update_value else 'disabled'}"
     comment = get_api_comment(operation)
     
