@@ -47,6 +47,7 @@ def build_executable():
         '--hidden-import=ttkbootstrap',
         '--hidden-import=PIL',
         '--hidden-import=configparser',
+        '--hidden-import=notifications.teams',
         '--hidden-import=json',
         '--hidden-import=threading',
         '--hidden-import=subprocess',
@@ -61,6 +62,7 @@ def build_executable():
         '--add-data=api_config;api_config',
         '--add-data=shared;shared',
         '--add-data=constants;constants',
+        '--add-data=notifications;notifications',
         
         # Version info for Windows
         '--version-file=version_info.txt',

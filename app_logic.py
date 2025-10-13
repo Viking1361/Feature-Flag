@@ -3,6 +3,9 @@ import logging
 from api_config.api_endpoints import FeatureFlagEndpoints, APIHeaders, APIConfig, URLBuilder, LAUNCHDARKLY_BASE_URL
 from shared.constants import ENVIRONMENT_MAPPINGS
 from shared.config_loader import LOG_FILE
+from shared.user_session import get_api_comment, get_current_user
+from notifications.teams import notify_flag_change
+from shared.audit import audit_event
 
 # Module logger (configuration is handled by the main app)
 logger = logging.getLogger(__name__)
@@ -72,7 +75,6 @@ def get_feature_flag_data(parsed_url, feature_flag_key, auth_token, app_context)
 
 def update_flag(env_key, feature_key, update_value):
     from shared.config_loader import LAUNCHDARKLY_API_KEY, PROJECT_KEY
-    from shared.user_session import get_api_comment
 
     api_key = LAUNCHDARKLY_API_KEY
     project_key = PROJECT_KEY
@@ -126,6 +128,39 @@ def update_flag(env_key, feature_key, update_value):
             logger.info(
                 f"Success: Feature flag '{feature_key}' {'turned ON' if update_value else 'turned OFF'}."
             )
+
+            # Post Teams notification (best-effort)
+            try:
+                user_name = get_current_user()
+                notify_flag_change(
+                    feature_key=feature_key,
+                    environment=actual_env_key,
+                    enabled=bool(update_value),
+                    user=user_name,
+                    ticket=None,
+                    comment=comment,
+                    ld_url=url,
+                )
+            except Exception as notify_err:
+                # Keep ASCII-only; do not fail the update if notify fails
+                logger.debug(f"Notify error (non-fatal): {notify_err}")
+
+            # Audit success
+            try:
+                audit_event(
+                    "update_flag",
+                    {
+                        "feature_key": feature_key,
+                        "environment": actual_env_key,
+                        "enabled": bool(update_value),
+                        "comment": comment,
+                        "ld_url": url,
+                    },
+                    ok=True,
+                )
+            except Exception:
+                pass
+
             return True
         except requests.exceptions.Timeout:
             logger.error(f"Update Feature Flag API call timed out (attempt {attempt + 1})")
@@ -135,6 +170,19 @@ def update_flag(env_key, feature_key, update_value):
             logger.error(f"Full error details: {e}")
 
     logger.error(f"Failed to update flag '{feature_key}' after {APIConfig.MAX_RETRIES} attempts.")
+    # Audit failure
+    try:
+        audit_event(
+            "update_flag",
+            {
+                "feature_key": feature_key,
+                "environment": actual_env_key,
+                "enabled": bool(update_value),
+            },
+            ok=False,
+        )
+    except Exception:
+        pass
     return False
 
 def get_environments():

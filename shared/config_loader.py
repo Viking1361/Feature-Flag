@@ -23,11 +23,24 @@ from pathlib import Path
 # Defaults (can be overridden by env/config)
 LOG_FILE = os.environ.get("LOG_FILE", "feature_flag.log")
 HISTORY_FILE = os.environ.get("HISTORY_FILE", "autocomplete_history.json")
+AUDIT_FILE = os.environ.get("AUDIT_FILE", "audit_events.jsonl")
 LAUNCHDARKLY_API_KEY = os.environ.get("LAUNCHDARKLY_API_KEY", "")
 PROJECT_KEY = os.environ.get("PROJECT_KEY", "")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "Admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "ia1")
+# Teams/Graph notifications (optional)
+TEAMS_ENABLED = os.environ.get("TEAMS_ENABLED", "false")
+GRAPH_TENANT_ID = os.environ.get("GRAPH_TENANT_ID", "")
+GRAPH_CLIENT_ID = os.environ.get("GRAPH_CLIENT_ID", "")
+GRAPH_CLIENT_SECRET = os.environ.get("GRAPH_CLIENT_SECRET", "")
+TEAMS_TEAM_ID = os.environ.get("TEAMS_TEAM_ID", "")
+TEAMS_CHANNEL_ID = os.environ.get("TEAMS_CHANNEL_ID", "")
+TEAMS_CHANNEL_EMAIL = os.environ.get("TEAMS_CHANNEL_EMAIL", "")
+# Teams dry-run testing (no Graph keys needed)
+TEAMS_DRY_RUN = os.environ.get("TEAMS_DRY_RUN", "false")
+TEAMS_DRY_RUN_WEBHOOK = os.environ.get("TEAMS_DRY_RUN_WEBHOOK", "")
+TEAMS_DRY_RUN_FILE = os.environ.get("TEAMS_DRY_RUN_FILE", "teams_dry_run.jsonl")
 
 # 2) Try to load optional root-level config.py without creating a hard import dependency
 try:
@@ -38,9 +51,20 @@ try:
         PROJECT_KEY = getattr(cfg, "PROJECT_KEY", PROJECT_KEY)
         LOG_FILE = getattr(cfg, "LOG_FILE", LOG_FILE)
         HISTORY_FILE = getattr(cfg, "HISTORY_FILE", HISTORY_FILE)
+        AUDIT_FILE = getattr(cfg, "AUDIT_FILE", AUDIT_FILE)
         GITHUB_TOKEN = getattr(cfg, "GITHUB_TOKEN", GITHUB_TOKEN)
         ADMIN_USERNAME = getattr(cfg, "ADMIN_USERNAME", ADMIN_USERNAME)
         ADMIN_PASSWORD = getattr(cfg, "ADMIN_PASSWORD", ADMIN_PASSWORD)
+        TEAMS_ENABLED = getattr(cfg, "TEAMS_ENABLED", TEAMS_ENABLED)
+        GRAPH_TENANT_ID = getattr(cfg, "GRAPH_TENANT_ID", GRAPH_TENANT_ID)
+        GRAPH_CLIENT_ID = getattr(cfg, "GRAPH_CLIENT_ID", GRAPH_CLIENT_ID)
+        GRAPH_CLIENT_SECRET = getattr(cfg, "GRAPH_CLIENT_SECRET", GRAPH_CLIENT_SECRET)
+        TEAMS_TEAM_ID = getattr(cfg, "TEAMS_TEAM_ID", TEAMS_TEAM_ID)
+        TEAMS_CHANNEL_ID = getattr(cfg, "TEAMS_CHANNEL_ID", TEAMS_CHANNEL_ID)
+        TEAMS_CHANNEL_EMAIL = getattr(cfg, "TEAMS_CHANNEL_EMAIL", TEAMS_CHANNEL_EMAIL)
+        TEAMS_DRY_RUN = getattr(cfg, "TEAMS_DRY_RUN", TEAMS_DRY_RUN)
+        TEAMS_DRY_RUN_WEBHOOK = getattr(cfg, "TEAMS_DRY_RUN_WEBHOOK", TEAMS_DRY_RUN_WEBHOOK)
+        TEAMS_DRY_RUN_FILE = getattr(cfg, "TEAMS_DRY_RUN_FILE", TEAMS_DRY_RUN_FILE)
 except Exception:
     # Safe fallback if config.py isn't available
     pass
@@ -71,9 +95,20 @@ try:
                     PROJECT_KEY = getattr(cfg_local, "PROJECT_KEY", PROJECT_KEY)
                     LOG_FILE = getattr(cfg_local, "LOG_FILE", LOG_FILE)
                     HISTORY_FILE = getattr(cfg_local, "HISTORY_FILE", HISTORY_FILE)
+                    AUDIT_FILE = getattr(cfg_local, "AUDIT_FILE", AUDIT_FILE)
                     GITHUB_TOKEN = getattr(cfg_local, "GITHUB_TOKEN", GITHUB_TOKEN)
                     ADMIN_USERNAME = getattr(cfg_local, "ADMIN_USERNAME", ADMIN_USERNAME)
                     ADMIN_PASSWORD = getattr(cfg_local, "ADMIN_PASSWORD", ADMIN_PASSWORD)
+                    TEAMS_ENABLED = getattr(cfg_local, "TEAMS_ENABLED", TEAMS_ENABLED)
+                    GRAPH_TENANT_ID = getattr(cfg_local, "GRAPH_TENANT_ID", GRAPH_TENANT_ID)
+                    GRAPH_CLIENT_ID = getattr(cfg_local, "GRAPH_CLIENT_ID", GRAPH_CLIENT_ID)
+                    GRAPH_CLIENT_SECRET = getattr(cfg_local, "GRAPH_CLIENT_SECRET", GRAPH_CLIENT_SECRET)
+                    TEAMS_TEAM_ID = getattr(cfg_local, "TEAMS_TEAM_ID", TEAMS_TEAM_ID)
+                    TEAMS_CHANNEL_ID = getattr(cfg_local, "TEAMS_CHANNEL_ID", TEAMS_CHANNEL_ID)
+                    TEAMS_CHANNEL_EMAIL = getattr(cfg_local, "TEAMS_CHANNEL_EMAIL", TEAMS_CHANNEL_EMAIL)
+                    TEAMS_DRY_RUN = getattr(cfg_local, "TEAMS_DRY_RUN", TEAMS_DRY_RUN)
+                    TEAMS_DRY_RUN_WEBHOOK = getattr(cfg_local, "TEAMS_DRY_RUN_WEBHOOK", TEAMS_DRY_RUN_WEBHOOK)
+                    TEAMS_DRY_RUN_FILE = getattr(cfg_local, "TEAMS_DRY_RUN_FILE", TEAMS_DRY_RUN_FILE)
                     break
         except Exception:
             continue
@@ -120,9 +155,20 @@ try:
                 PROJECT_KEY = data.get("PROJECT_KEY", PROJECT_KEY)
                 LOG_FILE = data.get("LOG_FILE", LOG_FILE)
                 HISTORY_FILE = data.get("HISTORY_FILE", HISTORY_FILE)
+                AUDIT_FILE = data.get("AUDIT_FILE", AUDIT_FILE)
                 GITHUB_TOKEN = data.get("GITHUB_TOKEN", GITHUB_TOKEN)
                 ADMIN_USERNAME = data.get("ADMIN_USERNAME", ADMIN_USERNAME)
                 ADMIN_PASSWORD = data.get("ADMIN_PASSWORD", ADMIN_PASSWORD)
+                TEAMS_ENABLED = data.get("TEAMS_ENABLED", TEAMS_ENABLED)
+                GRAPH_TENANT_ID = data.get("GRAPH_TENANT_ID", GRAPH_TENANT_ID)
+                GRAPH_CLIENT_ID = data.get("GRAPH_CLIENT_ID", GRAPH_CLIENT_ID)
+                GRAPH_CLIENT_SECRET = data.get("GRAPH_CLIENT_SECRET", GRAPH_CLIENT_SECRET)
+                TEAMS_TEAM_ID = data.get("TEAMS_TEAM_ID", TEAMS_TEAM_ID)
+                TEAMS_CHANNEL_ID = data.get("TEAMS_CHANNEL_ID", TEAMS_CHANNEL_ID)
+                TEAMS_CHANNEL_EMAIL = data.get("TEAMS_CHANNEL_EMAIL", TEAMS_CHANNEL_EMAIL)
+                TEAMS_DRY_RUN = data.get("TEAMS_DRY_RUN", TEAMS_DRY_RUN)
+                TEAMS_DRY_RUN_WEBHOOK = data.get("TEAMS_DRY_RUN_WEBHOOK", TEAMS_DRY_RUN_WEBHOOK)
+                TEAMS_DRY_RUN_FILE = data.get("TEAMS_DRY_RUN_FILE", TEAMS_DRY_RUN_FILE)
                 break
         except Exception:
             # Ignore JSON errors and try the next candidate
@@ -145,6 +191,26 @@ try:
             # If unable to create, fallback to CWD for relative paths
             app_dir = Path.cwd()
 
+        # Expand placeholders and environment variables in path-like settings
+        def _expand_path_tokens(p: str) -> str:
+            try:
+                if not p:
+                    return p
+                # Expand environment variables like %USERPROFILE% or %LOCALAPPDATA%
+                p = os.path.expandvars(str(p))
+                # Token substitution
+                exe_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
+                tokens = {
+                    "{EXE_DIR}": str(exe_dir),
+                    "{CWD}": str(Path.cwd()),
+                    "{APPDATA_DIR}": str(app_dir),
+                }
+                for k, v in tokens.items():
+                    p = p.replace(k, v)
+                return p
+            except Exception:
+                return p
+
         def _resolve_path(p: str, default_names: tuple[str, ...]) -> str:
             try:
                 if not p:
@@ -164,8 +230,11 @@ try:
             except Exception:
                 return p
 
-        LOG_FILE = _resolve_path(LOG_FILE, ("feature_flag.log",))
-        HISTORY_FILE = _resolve_path(HISTORY_FILE, ("autocomplete_history.json",))
+        # First expand tokens, then resolve relative paths
+        LOG_FILE = _resolve_path(_expand_path_tokens(LOG_FILE), ("feature_flag.log",))
+        HISTORY_FILE = _resolve_path(_expand_path_tokens(HISTORY_FILE), ("autocomplete_history.json",))
+        TEAMS_DRY_RUN_FILE = _resolve_path(_expand_path_tokens(TEAMS_DRY_RUN_FILE), ("teams_dry_run.jsonl",))
+        AUDIT_FILE = _resolve_path(_expand_path_tokens(AUDIT_FILE), ("audit_events.jsonl",))
 except Exception:
     pass
 
@@ -174,6 +243,28 @@ LAUNCHDARKLY_API_KEY = str(LAUNCHDARKLY_API_KEY) if LAUNCHDARKLY_API_KEY is not 
 PROJECT_KEY = str(PROJECT_KEY) if PROJECT_KEY is not None else ""
 LOG_FILE = str(LOG_FILE) if LOG_FILE is not None else "feature_flag.log"
 HISTORY_FILE = str(HISTORY_FILE) if HISTORY_FILE is not None else "autocomplete_history.json"
+AUDIT_FILE = str(AUDIT_FILE) if AUDIT_FILE is not None else "audit_events.jsonl"
 GITHUB_TOKEN = str(GITHUB_TOKEN) if GITHUB_TOKEN is not None else ""
 ADMIN_USERNAME = str(ADMIN_USERNAME) if ADMIN_USERNAME is not None else "Admin"
 ADMIN_PASSWORD = str(ADMIN_PASSWORD) if ADMIN_PASSWORD is not None else "ia1"
+
+# Normalize booleans and ensure strings for Teams/Graph
+try:
+    TEAMS_ENABLED = str(TEAMS_ENABLED).strip().lower() in ("1", "true", "yes", "on")
+except Exception:
+    TEAMS_ENABLED = False
+
+try:
+    TEAMS_DRY_RUN = str(TEAMS_DRY_RUN).strip().lower() in ("1", "true", "yes", "on")
+except Exception:
+    TEAMS_DRY_RUN = False
+
+GRAPH_TENANT_ID = str(GRAPH_TENANT_ID) if 'GRAPH_TENANT_ID' in globals() and GRAPH_TENANT_ID is not None else ""
+GRAPH_CLIENT_ID = str(GRAPH_CLIENT_ID) if 'GRAPH_CLIENT_ID' in globals() and GRAPH_CLIENT_ID is not None else ""
+GRAPH_CLIENT_SECRET = str(GRAPH_CLIENT_SECRET) if 'GRAPH_CLIENT_SECRET' in globals() and GRAPH_CLIENT_SECRET is not None else ""
+TEAMS_TEAM_ID = str(TEAMS_TEAM_ID) if 'TEAMS_TEAM_ID' in globals() and TEAMS_TEAM_ID is not None else ""
+TEAMS_CHANNEL_ID = str(TEAMS_CHANNEL_ID) if 'TEAMS_CHANNEL_ID' in globals() and TEAMS_CHANNEL_ID is not None else ""
+TEAMS_CHANNEL_EMAIL = str(TEAMS_CHANNEL_EMAIL) if 'TEAMS_CHANNEL_EMAIL' in globals() and TEAMS_CHANNEL_EMAIL is not None else ""
+TEAMS_DRY_RUN_WEBHOOK = str(TEAMS_DRY_RUN_WEBHOOK) if 'TEAMS_DRY_RUN_WEBHOOK' in globals() and TEAMS_DRY_RUN_WEBHOOK is not None else ""
+TEAMS_DRY_RUN_FILE = str(TEAMS_DRY_RUN_FILE) if 'TEAMS_DRY_RUN_FILE' in globals() and TEAMS_DRY_RUN_FILE is not None else "teams_dry_run.jsonl"
+AUDIT_FILE = str(AUDIT_FILE) if 'AUDIT_FILE' in globals() and AUDIT_FILE is not None else "audit_events.jsonl"

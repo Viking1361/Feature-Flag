@@ -18,6 +18,7 @@ from ui.tabs.get_tab import GetTab
 from ui.tabs.update_tab import UpdateTab
 from ui.tabs.create_tab import CreateTab
 from ui.tabs.enhanced_view_tab import EnhancedViewTab as ViewTab
+from ui.tabs.notifications_tab import NotificationsTab
 from ui.tabs.log_tab import LogTab
 
 # Module logger for this UI module
@@ -193,6 +194,7 @@ class FeatureFlagApp:
             ("update", "Update Feature Flag", "⚙️", "update_flag"),
             ("create", "Create Feature Flag", "➕", "create_flag"),
             ("view", "🔒 Feature Flags List", "📊", "view_all_flags"),  # Admin only
+            ("notifications", "Notifications", "🔔", "get_flag"),
             ("log", "Log Viewer", "📝", "get_flag")  # Available to all
         ]
         
@@ -248,6 +250,8 @@ class FeatureFlagApp:
             self.tab_instances["view"] = ViewTab(self.tab_frames["view"], self.history_manager, self.theme_manager)
         if "log" in available_tab_ids:
             self.tab_instances["log"] = LogTab(self.tab_frames["log"], self.history_manager, self.theme_manager)
+        if "notifications" in available_tab_ids:
+            self.tab_instances["notifications"] = NotificationsTab(self.tab_frames["notifications"], self.history_manager, self.theme_manager)
 
         # Show default tab (first available tab)
         default_tab = available_tab_ids[0] if available_tab_ids else "get"
