@@ -3,6 +3,7 @@ import ttkbootstrap as ttk
 from tkinter import messagebox
 import logging
 import requests
+import webbrowser
 from shared.config_loader import LAUNCHDARKLY_API_KEY, PROJECT_KEY, LOG_FILE
 from api_config.api_endpoints import LAUNCHDARKLY_BASE_URL
 from shared.constants import ENVIRONMENT_MAPPINGS
@@ -13,6 +14,8 @@ except ImportError:
     READ_ENVIRONMENT_OPTIONS = ["DEV", "OCRT", "SAT", "PROD"]
 from api_client import get_client
 import json
+import time
+from shared.audit import audit_event
 
 # Module logger for this UI module
 logger = logging.getLogger(__name__)
@@ -24,6 +27,10 @@ class GetTab:
         self.theme_manager = theme_manager
         # Initialize optimized API client
         self.api_client = get_client()
+        # Keep last result for summary banner
+        self.last_flag_data = None
+        # Track running animation jobs per canvas to allow cancellation
+        self._anim_jobs = {}
         self.setup_ui()
 
     def setup_ui(self):
@@ -57,34 +64,69 @@ class GetTab:
         subtitle_label.pack(anchor="w", pady=(5, 0))
 
         # --- Input Fields Section ---
-        input_container = ttk.Frame(get_frame)
-        input_container.pack(fill="x", pady=(0, 25))
+        self.input_container = ttk.Frame(get_frame)
+        self.input_container.pack(fill="x", pady=(0, 25))
         
         # Create a modern card-like frame
-        input_frame = ttk.Frame(input_container, style="Content.TFrame")
+        input_frame = ttk.Frame(self.input_container, style="Content.TFrame")
         input_frame.pack(fill="x", padx=5)
         
         # Card header
-        card_header = ttk.Frame(input_frame)
-        card_header.pack(fill="x", padx=25, pady=(20, 15))
+        self.card_header = ttk.Frame(input_frame)
+        self.card_header.pack(fill="x", padx=25, pady=(20, 15))
         
         card_title = ttk.Label(
-            card_header,
+            self.card_header,
             text="🔧 Configuration",
             font=("Segoe UI", 16, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        card_title.pack(anchor="w")
+        card_title.pack(side="left", anchor="w")
+        # Collapse/Expand button for input card
+        self.input_collapsed = False
+        def _toggle_input():
+            try:
+                if self.input_collapsed:
+                    # Smooth expand
+                    self._expand_input(animated=True)
+                else:
+                    # Smooth collapse
+                    self._collapse_input(animated=True)
+            except Exception as e:
+                logger.debug(f"toggle_input error: {e}")
+        self.collapse_btn = ttk.Button(self.card_header, text="Collapse", width=10, command=_toggle_input)
+        self.collapse_btn.pack(side="right")
+
+        # Animated container for input content (form + actions)
+        # This enables smooth collapse/expand of the top card contents
+        self.input_anim_canvas = tk.Canvas(
+            input_frame,
+            height=1,
+            highlightthickness=0,
+            bg=self.theme_manager.get_theme_config()["colors"]["background"],
+            borderwidth=0,
+        )
+        # Inner content frame that holds the form and action sections
+        self.input_content = ttk.Frame(self.input_anim_canvas)
+        self._input_anim_id = self.input_anim_canvas.create_window((0, 0), window=self.input_content, anchor="nw")
+        self.input_anim_canvas.pack(fill="x")
+        # Keep canvas width synced with parent
+        def _on_input_canvas_cfg(event):
+            try:
+                self.input_anim_canvas.itemconfigure(self._input_anim_id, width=event.width)
+            except Exception:
+                pass
+        self.input_anim_canvas.bind("<Configure>", _on_input_canvas_cfg)
 
         # Form fields with better layout
-        form_frame = ttk.Frame(input_frame)
-        form_frame.pack(fill="x", padx=25, pady=(0, 25))
+        self.form_frame = ttk.Frame(self.input_content)
+        self.form_frame.pack(fill="x", padx=25, pady=(0, 25))
         
         # Two-column layout for better organization
-        left_column = ttk.Frame(form_frame)
+        left_column = ttk.Frame(self.form_frame)
         left_column.pack(side="left", fill="x", expand=True, padx=(0, 15))
         
-        right_column = ttk.Frame(form_frame)
+        right_column = ttk.Frame(self.form_frame)
         right_column.pack(side="right", fill="x", expand=True, padx=(15, 0))
 
         # Left column fields
@@ -194,11 +236,11 @@ class GetTab:
         siteid_help.pack(anchor="w")
 
         # === ACTION BUTTONS SECTION ===
-        action_container = ttk.Frame(input_frame)
-        action_container.pack(fill="x", pady=(10, 0))
+        self.action_container = ttk.Frame(self.input_content)
+        self.action_container.pack(fill="x", pady=(10, 0))
         
         # Action buttons with enhanced modern styling
-        action_frame = ttk.Frame(action_container, style="Content.TFrame", padding=10)
+        action_frame = ttk.Frame(self.action_container, style="Content.TFrame", padding=10)
         action_frame.pack(fill="x", padx=10)
         
         # Centered button layout
@@ -221,14 +263,33 @@ class GetTab:
             width=15,
             command=self.reset_get_fields
         )
-        reset_button.pack(side="left")
+        reset_button.pack(side="left", padx=(0, 15))
+
+
+        # Make sure input canvas starts at natural height (expanded)
+        try:
+            self.parent.after(0, self._sync_input_canvas_height_initial)
+        except Exception:
+            pass
 
         # === TWO-COLUMN LAYOUT: FLAG STATUS & API RESPONSE ===
-        columns_container = ttk.Frame(get_frame)
-        columns_container.pack(fill="both", expand=True, padx=10, pady=10)
+        # Quick summary banner (shown when input is collapsed)
+        self.quick_summary_bar = ttk.Frame(get_frame, style="Content.TFrame", padding=(12,6))
+        self.quick_summary_label = ttk.Label(
+            self.quick_summary_bar,
+            text="",
+            font=("Segoe UI", 10),
+            foreground=self.theme_manager.get_theme_config()["colors"]["text"],
+        )
+        self.quick_summary_label.pack(anchor="w")
+        # Hidden by default
+        self.quick_summary_bar.pack_forget()
+
+        self.columns_container = ttk.Frame(get_frame)
+        self.columns_container.pack(fill="both", expand=True, padx=10, pady=10)
         
         # === LEFT COLUMN: FLAG STATUS ===
-        left_column = ttk.Frame(columns_container, style="Content.TFrame", padding=20)
+        left_column = ttk.Frame(self.columns_container, style="Content.TFrame", padding=20)
         left_column.pack(side="left", fill="both", expand=True, padx=(0, 5))
         
         # Flag status header with modern styling
@@ -283,37 +344,101 @@ class GetTab:
         )
         self.status_display.pack(pady=10, anchor="w")
 
-        # === RIGHT COLUMN: API RESPONSE DETAILS ===
-        right_column = ttk.Frame(columns_container, style="Content.TFrame", padding=20)
+        # === RIGHT COLUMN: VISUAL / JSON TABS ===
+        right_column = ttk.Frame(self.columns_container, style="Content.TFrame", padding=20)
         right_column.pack(side="right", fill="both", expand=True, padx=(5, 0))
-        
-        # API Response header
-        response_header = ttk.Frame(right_column)
-        response_header.pack(fill="x", pady=(0, 20))
-        
-        response_title = ttk.Label(
-            response_header,
-            text="📋 API Response Details",
+
+        tabs_header = ttk.Frame(right_column)
+        tabs_header.pack(fill="x", pady=(0, 10))
+        tabs_title = ttk.Label(
+            tabs_header,
+            text="Flag Details",
             font=("Segoe UI", 16, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        response_title.pack(anchor="w")
-        
-        # Response content area
-        response_content = ttk.Frame(right_column)
-        response_content.pack(fill="both", expand=True)
-        
-        # Create text container for better layout
-        text_container = ttk.Frame(response_content)
-        text_container.pack(fill="both", expand=True)
-        
-        # Enhanced API response text widget optimized for column layout
-        self.response_text = tk.Text(
-            text_container,
-            height=25,  # Taller for column layout
-            width=50,   # Adjusted width for right column
-            font=("Consolas", 9),  # Slightly smaller font to fit more content
-            wrap="none",  # No wrapping for better JSON formatting
+        tabs_title.pack(anchor="w")
+
+        # Notebook with Visual and JSON views
+        self.view_tabs = ttk.Notebook(right_column)
+        self.view_tabs.pack(fill="both", expand=True)
+
+        self.visual_frame = ttk.Frame(self.view_tabs)
+        self.summary_frame = ttk.Frame(self.view_tabs)
+        self.json_frame = ttk.Frame(self.view_tabs)
+
+        # Order: Visual (default), Summary, JSON
+        self.view_tabs.add(self.visual_frame, text="Visual")
+        self.view_tabs.add(self.summary_frame, text="Summary")
+        self.view_tabs.add(self.json_frame, text="JSON")
+
+        # Visual tab content: scrollable area (Canvas + inner frame + scrollbar)
+        self.visual_container = ttk.Frame(self.visual_frame)
+        self.visual_container.pack(fill="both", expand=True)
+
+        # Canvas background matches theme background
+        bg_color = self.theme_manager.get_theme_config()["colors"]["background"]
+        self.visual_canvas = tk.Canvas(
+            self.visual_container,
+            highlightthickness=0,
+            bg=bg_color,
+            borderwidth=0,
+        )
+        self.visual_vscroll = ttk.Scrollbar(
+            self.visual_container, orient="vertical", command=self.visual_canvas.yview
+        )
+        self.visual_canvas.configure(yscrollcommand=self.visual_vscroll.set)
+
+        # Inner frame that will hold all visual widgets
+        self.visual_inner = ttk.Frame(self.visual_canvas)
+        self.visual_inner_id = self.visual_canvas.create_window(
+            (0, 0), window=self.visual_inner, anchor="nw"
+        )
+
+        self.visual_canvas.pack(side="left", fill="both", expand=True)
+        self.visual_vscroll.pack(side="right", fill="y")
+
+        # Keep scrollregion in sync with inner frame size and width with canvas width
+        def _on_inner_configure(event):
+            try:
+                self.visual_canvas.configure(scrollregion=self.visual_canvas.bbox("all"))
+            except Exception:
+                pass
+
+        def _on_canvas_configure(event):
+            try:
+                self.visual_canvas.itemconfigure(self.visual_inner_id, width=event.width)
+            except Exception:
+                pass
+
+        self.visual_inner.bind("<Configure>", _on_inner_configure)
+        self.visual_canvas.bind("<Configure>", _on_canvas_configure)
+
+        # Mouse wheel scrolling (Windows)
+        def _on_mousewheel(event):
+            try:
+                self.visual_canvas.yview_scroll(-int(event.delta / 120), "units")
+            except Exception:
+                pass
+
+        def _bind_wheel(_):
+            self.visual_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        def _unbind_wheel(_):
+            self.visual_canvas.unbind_all("<MouseWheel>")
+
+        self.visual_canvas.bind("<Enter>", _bind_wheel)
+        self.visual_canvas.bind("<Leave>", _unbind_wheel)
+
+        # Summary tab content (text-only)
+        summary_container = ttk.Frame(self.summary_frame)
+        summary_container.pack(fill="both", expand=True)
+
+        self.summary_text = tk.Text(
+            summary_container,
+            height=25,
+            width=50,
+            font=("Consolas", 10),
+            wrap="word",
             state="disabled",
             bg=self.theme_manager.get_theme_config()["colors"]["background"],
             fg=self.theme_manager.get_theme_config()["colors"]["text"],
@@ -323,14 +448,44 @@ class GetTab:
             highlightthickness=0,
             relief="flat"
         )
-        
-        # Enhanced scrollbar setup
-        response_scrollbar = ttk.Scrollbar(text_container, orient="vertical", command=self.response_text.yview)
-        self.response_text.configure(yscrollcommand=response_scrollbar.set)
-        
-        # Pack text widget and scrollbar properly
+        summary_scrollbar = ttk.Scrollbar(summary_container, orient="vertical", command=self.summary_text.yview)
+        self.summary_text.configure(yscrollcommand=summary_scrollbar.set)
+        self.summary_text.pack(side="left", fill="both", expand=True)
+        summary_scrollbar.pack(side="right", fill="y")
+
+        # JSON tab content
+        json_container = ttk.Frame(self.json_frame)
+        json_container.pack(fill="both", expand=True)
+
+        self.response_text = tk.Text(
+            json_container,
+            height=25,
+            width=50,
+            font=("Consolas", 9),
+            wrap="none",
+            state="disabled",
+            bg=self.theme_manager.get_theme_config()["colors"]["background"],
+            fg=self.theme_manager.get_theme_config()["colors"]["text"],
+            selectbackground=self.theme_manager.get_theme_config()["colors"]["primary"],
+            insertbackground=self.theme_manager.get_theme_config()["colors"]["text"],
+            bd=0,
+            highlightthickness=0,
+            relief="flat"
+        )
+
+        json_scrollbar = ttk.Scrollbar(json_container, orient="vertical", command=self.response_text.yview)
+        self.response_text.configure(yscrollcommand=json_scrollbar.set)
+
         self.response_text.pack(side="left", fill="both", expand=True)
-        response_scrollbar.pack(side="right", fill="y")
+        json_scrollbar.pack(side="right", fill="y")
+
+        # Hide the left "Flag Status" column; we now merge summary into Visual view
+        try:
+            # columns_container has two children: left_column and right_column
+            # left_column is the first one we created; pack_forget will remove it from layout
+            left_column.pack_forget()
+        except Exception:
+            pass
 
 
 
@@ -389,11 +544,34 @@ class GetTab:
                 enabled_val = bool(flag_data.get("enabled", False))
                 actual_env = flag_data.get("actual_environment", environment)
                 logging.info(f"Get success: key={feature_key} env={actual_env} enabled={enabled_val}")
+                try:
+                    audit_event(
+                        "get_flag",
+                        {
+                            "feature_key": feature_key,
+                            "environment": actual_env,
+                            "enabled": enabled_val,
+                        },
+                        ok=True,
+                    )
+                except Exception:
+                    pass
             else:
                 self.status_var.set("❌ Failed to retrieve flag status")
                 self.response_text.config(state="normal")
                 self.response_text.delete(1.0, tk.END)
                 self.response_text.insert(1.0, "Failed to retrieve feature flag status. Please check the flag key and try again.")
+                try:
+                    audit_event(
+                        "get_flag",
+                        {
+                            "feature_key": feature_key,
+                            "environment": environment,
+                        },
+                        ok=False,
+                    )
+                except Exception:
+                    pass
                 
         except Exception as e:
             self.status_var.set("❌ Error occurred")
@@ -401,11 +579,24 @@ class GetTab:
             self.response_text.delete(1.0, tk.END)
             self.response_text.insert(1.0, f"Error: {str(e)}")
             logging.error(f"Error getting feature flag status: {str(e)}")
+            try:
+                audit_event(
+                    "get_flag",
+                    {
+                        "feature_key": feature_key,
+                        "environment": environment,
+                        "error": str(e),
+                    },
+                    ok=False,
+                )
+            except Exception:
+                pass
 
         # Hide loading indicator
         self.loading_frame.pack_forget()
         self.loading_var.set("")
         self.submit_button.config(state="normal")
+
 
     def build_user_context(self, pmcid, siteid):
         """Build user context JSON from PMCID and SITE ID"""
@@ -468,6 +659,12 @@ class GetTab:
                 # Process user context if provided
                 context_info = self.process_user_context(user_context, flag_data, actual_env)
                 
+                links = flag_data.get("_links", {}) if isinstance(flag_data, dict) else {}
+                app_url = ""
+                try:
+                    app_url = links.get("site", {}).get("href") or ""
+                except Exception:
+                    app_url = ""
                 return {
                     "key": feature_key,
                     "name": flag_data.get("name", ""),
@@ -479,7 +676,9 @@ class GetTab:
                     "variations": flag_data.get("variations", []),
                     "defaults": flag_data.get("defaults", {}),
                     "user_context": context_info,
-                    "full_data": flag_data
+                    "full_data": flag_data,
+                    "api_url": url,
+                    "app_url": app_url,
                 }
             else:
                 logging.error(f"API Error: {response.status_code} - {response.text}")
@@ -543,13 +742,14 @@ class GetTab:
         
         # Check if user matches any targets
         user_key = context_data.get("key", "")
-        for target in targets:
+        for t_idx, target in enumerate(targets):
             if user_key in target.get("values", []):
                 variation = target.get("variation", 0)
                 return {
                     "variation": f"Target Match (Variation {variation})",
                     "value": self.get_variation_value(variation, flag_data),
-                    "message": f"User '{user_key}' matches target rule"
+                    "message": f"User '{user_key}' matches target rule",
+                    "match": {"type": "target", "index": t_idx}
                 }
         
         # Check if user matches any rules
@@ -560,7 +760,8 @@ class GetTab:
                 return {
                     "variation": f"Rule Match (Variation {variation})",
                     "message": f"User context matches rule: {rule.get('description', 'Custom rule')}",
-                    "value": self.get_variation_value(variation, flag_data)
+                    "value": self.get_variation_value(variation, flag_data),
+                    "match": {"type": "rule", "index": i, "description": rule.get("description")}
                 }
         
         # Default to fallthrough
@@ -570,7 +771,8 @@ class GetTab:
         return {
             "variation": f"Fallthrough (Variation {variation})",
             "value": self.get_variation_value(variation, flag_data),
-            "message": "User context matches fallthrough (default) behavior"
+            "message": "User context matches fallthrough (default) behavior",
+            "match": {"type": "fallthrough"}
         }
 
     def evaluate_rule(self, context_data, rule):
@@ -634,6 +836,8 @@ class GetTab:
 
     def display_flag_status(self, flag_data):
         """Display flag status in a simple, clean format"""
+        # Keep the last result for quick summary banner
+        self.last_flag_data = flag_data
         key = flag_data.get("key", "")
         name = flag_data.get("name", "")
         env = flag_data.get("environment", "")
@@ -649,7 +853,10 @@ class GetTab:
         
         if user_context.get("provided") and "context" in user_context:
             context_data = user_context["context"]
+            # Support both key casings just in case
             pmc_id = context_data.get("PmcId")
+            if pmc_id is None:
+                pmc_id = context_data.get("pmcId")
             site_id = context_data.get("SiteId")
             user_key = context_data.get("key", "")
 
@@ -721,11 +928,696 @@ class GetTab:
         # Show in FLAG STATUS section
         self.status_var.set("\n".join(summary_lines))
 
-        # Show clean API response in response text widget
+        # Render Visual tab (LD-like view)
+        try:
+            self.render_visual_view(flag_data)
+        except Exception as e:
+            logger.debug(f"render_visual_view error: {e}")
+
+        # Render Summary tab (concise, text-only)
+        try:
+            self.render_summary_view(flag_data)
+        except Exception as e:
+            logger.debug(f"render_summary_view error: {e}")
+
+        # Show clean API response in JSON tab
         self.response_text.config(state="normal")
         self.response_text.delete(1.0, tk.END)
         self.response_text.insert(1.0, json.dumps(full_data, indent=2))
         self.response_text.config(state="disabled")
+
+        # Default to Visual tab
+        try:
+            self.view_tabs.select(self.visual_frame)
+        except Exception:
+            pass
+
+        # Auto-collapse the input area to maximize vertical space (animated)
+        try:
+            if hasattr(self, 'input_collapsed') and not self.input_collapsed:
+                self._collapse_input(animated=True)
+        except Exception as e:
+            logger.debug(f"auto-collapse error: {e}")
+
+        # Update quick summary banner after results
+        try:
+            self.refresh_quick_summary(show=True)
+        except Exception as e:
+            logger.debug(f"quick_summary refresh error: {e}")
+
+        # Persist a compact snapshot for Notifications tab autofill
+        try:
+            hist = self.history_manager.get_history()
+            hist["last_flag"] = {
+                "key": key,
+                "name": name,
+                "environment": env,
+                "actual_environment": actual_env,
+                "enabled": bool(enabled),
+                "app_url": flag_data.get("app_url") or "",
+            }
+            self.history_manager.save_history()
+        except Exception as e:
+            logger.debug(f"save last_flag history error: {e}")
+
+    def render_summary_view(self, flag_data):
+        """Render a concise text-only summary of the flag and evaluation."""
+        full = flag_data.get("full_data", {})
+        actual_env = flag_data.get("actual_environment", "")
+        enabled = bool(flag_data.get("enabled", False))
+        key = flag_data.get("key", "")
+        name = flag_data.get("name", "")
+
+        envs = full.get("environments", {})
+        env_data = envs.get(actual_env, {})
+
+        # Default serve value based on on/off state
+        if enabled:
+            fallthrough = env_data.get("fallthrough", {})
+            def_idx = fallthrough.get("variation", 0)
+        else:
+            def_idx = env_data.get("offVariation", 1)
+        def_val_raw = self.get_variation_value(def_idx, full)
+        def_val = "Enabled" if def_val_raw is True else ("Disabled" if def_val_raw is False else def_val_raw)
+
+        # Evaluation result for provided context
+        uc = flag_data.get("user_context", {}) or {}
+        var = uc.get("variation", {}) if isinstance(uc, dict) else {}
+        eval_val_raw = var.get("value")
+        eval_val = "Enabled" if eval_val_raw is True else ("Disabled" if eval_val_raw is False else eval_val_raw)
+        eval_msg = var.get("message") or ""
+        match = var.get("match") if isinstance(var, dict) else None
+
+        # Optional context fields
+        ctx = uc.get("context", {}) if uc.get("provided") else {}
+        user_key = ctx.get("key") if isinstance(ctx, dict) else None
+        pmc = ctx.get("PmcId") if isinstance(ctx, dict) else None
+        if pmc is None and isinstance(ctx, dict):
+            pmc = ctx.get("pmcId")
+        site = ctx.get("SiteId") if isinstance(ctx, dict) else None
+
+        # Compose summary lines
+        lines = []
+        lines.append(f"Flag: {key}")
+        if name:
+            lines.append(f"Name: {name}")
+        lines.append(f"Environment: {actual_env}")
+        lines.append(f"Status: {'On' if enabled else 'Off'}")
+        lines.append(f"Default serve: {def_val}")
+        if eval_val is not None:
+            lines.append(f"Your result: {eval_val}")
+        if eval_msg:
+            lines.append(f"Reason: {eval_msg}")
+        if match:
+            try:
+                if match.get('type') == 'rule':
+                    desc = match.get('description') or f"Rule {match.get('index', 0)+1}"
+                    lines.append(f"Matched: {desc}")
+                elif match.get('type') == 'target':
+                    lines.append("Matched: Target list")
+                else:
+                    lines.append("Matched: Default rule (fallthrough)")
+            except Exception:
+                pass
+        # Context line
+        ctx_parts = []
+        if user_key:
+            ctx_parts.append(f"key={user_key}")
+        if pmc is not None:
+            ctx_parts.append(f"PmcId={pmc}")
+        if site:
+            ctx_parts.append(f"SiteId={site}")
+        if ctx_parts:
+            lines.append("Context: " + ", ".join(ctx_parts))
+
+        # Push to widget
+        text = "\n".join(lines)
+        self.summary_text.config(state="normal")
+        self.summary_text.delete(1.0, tk.END)
+        self.summary_text.insert(1.0, text)
+        self.summary_text.config(state="disabled")
+
+    def refresh_quick_summary(self, show: bool = True):
+        """Update the quick summary banner content and visibility.
+        Shows key details: flag key/name, environment, status, result, and PmcId if provided.
+        """
+        try:
+            if not self.last_flag_data:
+                self.quick_summary_bar.pack_forget()
+                return
+
+            fd = self.last_flag_data
+            key = fd.get("key", "")
+            name = fd.get("name") or ""
+            actual_env = fd.get("actual_environment", fd.get("environment", ""))
+            enabled = bool(fd.get("enabled", False))
+            status_txt = "On" if enabled else "Off"
+
+            full = fd.get("full_data", {}) or {}
+            envs = full.get("environments", {})
+            env_data = envs.get(actual_env, {})
+            if enabled:
+                fallthrough = env_data.get("fallthrough", {})
+                def_idx = fallthrough.get("variation", 0)
+            else:
+                def_idx = env_data.get("offVariation", 1)
+            def_val_raw = self.get_variation_value(def_idx, full)
+            def_val = "Enabled" if def_val_raw is True else ("Disabled" if def_val_raw is False else def_val_raw)
+
+            uc = fd.get("user_context", {}) or {}
+            var = uc.get("variation", {}) if isinstance(uc, dict) else {}
+            eval_val_raw = var.get("value")
+            eval_val = "Enabled" if eval_val_raw is True else ("Disabled" if eval_val_raw is False else eval_val_raw)
+            ctx = uc.get("context", {}) if uc.get("provided") else {}
+            pmc = None
+            site = None
+            if isinstance(ctx, dict):
+                pmc = ctx.get("PmcId") if ctx.get("PmcId") is not None else ctx.get("pmcId")
+                site = ctx.get("SiteId")
+
+            parts = []
+            parts.append(f"Flag: {key}")
+            if name:
+                parts.append(f"Name: {name}")
+            if actual_env:
+                parts.append(f"Env: {actual_env}")
+            try:
+                env_type = fd.get("environment", "")
+                if env_type and env_type != actual_env:
+                    parts.append(f"Type: {env_type}")
+            except Exception:
+                pass
+            parts.append(f"Status: {status_txt}")
+            parts.append(f"Default: {def_val}")
+            if eval_val is not None:
+                parts.append(f"Result: {eval_val}")
+            if pmc is not None:
+                parts.append(f"PmcId: {pmc}")
+            if site:
+                parts.append(f"SiteId: {site}")
+
+            self.quick_summary_label.configure(text=" | ".join(parts))
+
+            if show:
+                try:
+                    # Place banner just above the response columns
+                    if hasattr(self, 'columns_container') and self.columns_container.winfo_manager():
+                        self.quick_summary_bar.pack(fill="x", pady=(6, 6), before=self.columns_container)
+                    else:
+                        self.quick_summary_bar.pack(fill="x", pady=(6, 6))
+                except Exception:
+                    self.quick_summary_bar.pack(fill="x", pady=(6, 6))
+            else:
+                self.quick_summary_bar.pack_forget()
+        except Exception as e:
+            logger.debug(f"refresh_quick_summary error: {e}")
+
+    # --- Animation helpers for smoother transitions ---
+    def _sync_input_canvas_height_initial(self):
+        try:
+            self.input_content.update_idletasks()
+            h = self.input_content.winfo_reqheight()
+            self.input_anim_canvas.configure(height=max(1, h))
+        except Exception as e:
+            logger.debug(f"sync_input_canvas error: {e}")
+
+    def _ease_cubic_in_out(self, p: float) -> float:
+        # Faster ease-in-out compared to smoothstep
+        try:
+            if p < 0.5:
+                return 4 * p * p * p
+            q = 2 * p - 2
+            return 1 + (q * q * q) / 2
+        except Exception:
+            return p
+
+    def _animate_canvas_height(self, canvas: tk.Canvas, target_h: int, duration_ms: int = 280, easing: str = "cubic", mode: str = "open", on_done=None):
+        """Animate a canvas height with easing.
+        - Cancels any prior animation on the same canvas for smoothness.
+        - Calls on_done when the animation completes.
+        - mode can be 'open' or 'close' to bias easing.
+        """
+        try:
+            # Cancel any existing scheduled frame for this canvas
+            try:
+                job = self._anim_jobs.pop(canvas, None)
+                if job is not None:
+                    canvas.after_cancel(job)
+            except Exception:
+                pass
+
+            start = time.perf_counter()
+            start_h = int(canvas.winfo_height())
+            delta = int(target_h) - start_h
+            # Compute duration with distance-based scaling
+            px = abs(delta)
+            base = duration_ms
+            # target speed about ~1.0 px/ms, clamp total duration
+            duration = max(160, min(420, int(base + px * 0.9)))
+
+            def ease_val(p):
+                # Blend ease based on mode
+                if easing == "cubic":
+                    if mode == "open":
+                        # easeOutCubic
+                        return 1 - pow(1 - p, 3)
+                    elif mode == "close":
+                        # easeInCubic
+                        return p * p * p
+                # Fallback linear
+                return p
+
+            def frame():
+                try:
+                    now = time.perf_counter()
+                    t = (now - start) * 1000.0
+                    p = 1.0 if duration == 0 else max(0.0, min(1.0, t / float(duration)))
+                    ep = ease_val(p)
+                    nh = int(start_h + delta * ep)
+                    canvas.configure(height=max(0, nh))
+                    if p < 1.0:
+                        job_id = canvas.after(12, frame)
+                        self._anim_jobs[canvas] = job_id
+                    else:
+                        canvas.configure(height=max(0, target_h))
+                        # Clear job and fire callback
+                        try:
+                            self._anim_jobs.pop(canvas, None)
+                        except Exception:
+                            pass
+                        if on_done:
+                            try:
+                                on_done()
+                            except Exception:
+                                pass
+                except Exception:
+                    try:
+                        canvas.configure(height=max(0, target_h))
+                        self._anim_jobs.pop(canvas, None)
+                    except Exception:
+                        pass
+                    if on_done:
+                        try:
+                            on_done()
+                        except Exception:
+                            pass
+            # Kick off first frame
+            frame()
+        except Exception as e:
+            logger.debug(f"animate_canvas_height error: {e}")
+
+    def _collapse_input(self, animated: bool = True):
+        try:
+            self.input_content.update_idletasks()
+            if animated:
+                self._animate_canvas_height(self.input_anim_canvas, 0)
+            else:
+                self.input_anim_canvas.configure(height=0)
+            if hasattr(self, 'collapse_btn'):
+                self.collapse_btn.configure(text="Expand")
+            self.input_collapsed = True
+            # Tighten spacing under header to reclaim vertical space
+            try:
+                self.input_container.pack_configure(pady=(0, 6))
+            except Exception:
+                pass
+            # Show quick summary banner if we have results
+            try:
+                self.refresh_quick_summary(show=True)
+            except Exception:
+                pass
+        except Exception as e:
+            logger.debug(f"collapse_input error: {e}")
+
+    def _expand_input(self, animated: bool = True):
+        try:
+            self.input_content.update_idletasks()
+            target_h = self.input_content.winfo_reqheight()
+            if animated:
+                self._animate_canvas_height(self.input_anim_canvas, max(1, target_h))
+            else:
+                self.input_anim_canvas.configure(height=max(1, target_h))
+            if hasattr(self, 'collapse_btn'):
+                self.collapse_btn.configure(text="Collapse")
+            self.input_collapsed = False
+            # Restore spacing under header
+            try:
+                self.input_container.pack_configure(pady=(0, 25))
+            except Exception:
+                pass
+            # Hide quick summary banner
+            try:
+                self.quick_summary_bar.pack_forget()
+            except Exception:
+                pass
+        except Exception as e:
+            logger.debug(f"expand_input error: {e}")
+
+    def render_visual_view(self, flag_data):
+        """Render a LaunchDarkly-like targeting view in the Visual tab."""
+        # Clear previous visual contents
+        for child in self.visual_inner.winfo_children():
+            child.destroy()
+
+        full_data = flag_data.get("full_data", {})
+        actual_env = flag_data.get("actual_environment", "")
+        enabled = bool(flag_data.get("enabled", False))
+        text_fg = self.theme_manager.get_theme_config()["colors"]["text"]
+
+        environments = full_data.get("environments", {})
+        env_data = environments.get(actual_env, {})
+        variations = full_data.get("variations", [])
+
+        # Actions bar (Copy/Open)
+        actions = ttk.Frame(self.visual_inner)
+        actions.pack(fill="x", pady=(0, 6))
+
+        def _copy_json():
+            try:
+                data = json.dumps(full_data, indent=2)
+                self.parent.clipboard_clear()
+                self.parent.clipboard_append(data)
+            except Exception as e:
+                logger.debug(f"copy_json error: {e}")
+
+        def _copy_api_url():
+            try:
+                api_url = flag_data.get("api_url", "")
+                if api_url:
+                    self.parent.clipboard_clear()
+                    self.parent.clipboard_append(api_url)
+            except Exception as e:
+                logger.debug(f"copy_api_url error: {e}")
+
+        def _open_api_url():
+            try:
+                api_url = flag_data.get("api_url", "")
+                if api_url:
+                    webbrowser.open(api_url)
+            except Exception as e:
+                logger.debug(f"open_api_url error: {e}")
+
+        def _open_app_url():
+            try:
+                app_url = flag_data.get("app_url", "")
+                if app_url:
+                    webbrowser.open(app_url)
+            except Exception as e:
+                logger.debug(f"open_app_url error: {e}")
+
+        ttk.Button(actions, text="Copy JSON", bootstyle="secondary", width=14, command=_copy_json).pack(side="left", padx=(0,6))
+        ttk.Button(actions, text="Copy API URL", bootstyle="secondary", width=14, command=_copy_api_url).pack(side="left", padx=(0,6))
+        ttk.Button(actions, text="Open API URL", bootstyle="info", width=14, command=_open_api_url).pack(side="left", padx=(0,6))
+        ttk.Button(actions, text="Open in LaunchDarkly", bootstyle="primary", width=22, command=_open_app_url).pack(side="left")
+
+        # Evaluation banner (top)
+        uc = flag_data.get("user_context", {}) or {}
+        ctx = uc.get("context", {}) if uc.get("provided") else {}
+        user_key = ctx.get("key") if isinstance(ctx, dict) else None
+        eval_text = "Default behavior"
+        detail_text = ""
+        bootstyle = None
+        try:
+            var = uc.get("variation", {}) if isinstance(uc, dict) else {}
+            val = var.get("value", None)
+            msg = var.get("message") or ""
+            match = var.get("match") if isinstance(var, dict) else None
+            if isinstance(val, bool):
+                eval_text = "Enabled" if val else "Disabled"
+                bootstyle = "success" if val else "danger"
+            elif val is not None:
+                eval_text = f"Variation: {val}"
+                bootstyle = "info"
+            else:
+                eval_text = "No specific match — default behavior"
+                bootstyle = "secondary"
+            detail_text = msg
+        except Exception:
+            bootstyle = "secondary"
+
+        banner = ttk.Frame(self.visual_inner, padding=10, style="Content.TFrame")
+        banner.pack(fill="x", pady=(0, 10))
+        title_lbl = ttk.Label(
+            banner,
+            text=eval_text,
+            font=("Segoe UI", 12, "bold"),
+            foreground=text_fg,
+        )
+        # Try to color the title using ttkbootstrap bootstyle (non-fatal if unsupported)
+        try:
+            if bootstyle:
+                title_lbl.configure(bootstyle=bootstyle)
+        except Exception:
+            pass
+        title_lbl.pack(anchor="w")
+
+        # Context line (chips)
+        ctx_row = ttk.Frame(banner)
+        ctx_row.pack(anchor="w", pady=(2,0))
+        if user_key:
+            ttk.Label(ctx_row, text="User:", font=("Segoe UI", 9, "bold"), foreground=text_fg).pack(side="left")
+            ttk.Label(ctx_row, text=user_key, font=("Segoe UI", 9), foreground=text_fg).pack(side="left", padx=(4,8))
+        try:
+            pmc = ctx.get("PmcId") if isinstance(ctx, dict) else None
+            if pmc is None and isinstance(ctx, dict):
+                pmc = ctx.get("pmcId")
+            if pmc is not None:
+                ttk.Label(ctx_row, text="PmcId:", font=("Segoe UI", 9, "bold"), foreground=text_fg).pack(side="left")
+                ttk.Label(ctx_row, text=str(pmc), font=("Segoe UI", 9), foreground=text_fg).pack(side="left", padx=(4,8))
+        except Exception:
+            pass
+        try:
+            site = ctx.get("SiteId")
+            if site:
+                ttk.Label(ctx_row, text="SiteId:", font=("Segoe UI", 9, "bold"), foreground=text_fg).pack(side="left")
+                ttk.Label(ctx_row, text=str(site), font=("Segoe UI", 9), foreground=text_fg).pack(side="left", padx=(4,8))
+        except Exception:
+            pass
+        # Plain-text context summary for maximum contrast
+        try:
+            parts = []
+            if isinstance(ctx, dict):
+                if user_key:
+                    parts.append(f"key={user_key}")
+                pmc_dbg = ctx.get("PmcId") if ctx.get("PmcId") is not None else ctx.get("pmcId")
+                if pmc_dbg is not None:
+                    parts.append(f"PmcId={pmc_dbg}")
+                if ctx.get("SiteId"):
+                    parts.append(f"SiteId={ctx.get('SiteId')}")
+            if parts:
+                ttk.Label(banner, text="Context: " + ", ".join(str(p) for p in parts), font=("Segoe UI", 9), foreground=text_fg).pack(anchor="w", pady=(2,0))
+        except Exception:
+            pass
+
+        if detail_text:
+            ttk.Label(banner, text=detail_text, font=("Segoe UI", 10), foreground=text_fg).pack(anchor="w")
+
+        # Environment header (pill)
+        env_header = ttk.Frame(self.visual_inner)
+        env_header.pack(fill="x", pady=(0, 10))
+        env_title = ttk.Label(env_header, text=f"Targeting configuration for {actual_env}", font=("Segoe UI", 12, "bold"), foreground=text_fg)
+        env_title.pack(anchor="w")
+
+        # Top bar: Flag is On/Off ...
+        top_bar = ttk.Frame(self.visual_inner, style="Content.TFrame")
+        top_bar.pack(fill="x", pady=(5, 10))
+        status_text = "On" if enabled else "Off"
+        serve_text = "serving variations based on rules" if enabled else "serving off variation"
+        ttk.Label(top_bar, text=f"Flag is {status_text} — {serve_text}", font=("Segoe UI", 11, "bold"), foreground=text_fg).pack(anchor="w", padx=8, pady=8)
+
+        # Accordion helper (only one open at a time) with simple height animation
+        accordion_sections = []
+        def make_section(parent, title_text, collapsible: bool = True, start_open: bool = False):
+            header = ttk.Frame(parent)
+            header.pack(fill="x", pady=(0,2))
+            # Chevron indicator + clickable title (avoid right-side toggle buttons)
+            chevron = ttk.Label(header, text=("v" if start_open else ">"), font=("Segoe UI", 11, "bold"), foreground=text_fg)
+            chevron.pack(side="left", padx=(8,4))
+            title = ttk.Label(header, text=title_text, font=("Segoe UI", 11, "bold"), foreground=text_fg)
+            title.pack(side="left")
+            # Animated container (canvas) with an inner frame
+            container = tk.Canvas(parent, height=0, highlightthickness=0, bg=self.theme_manager.get_theme_config()["colors"]["background"], borderwidth=0)
+            content = ttk.Frame(container, style="Content.TFrame")
+            inner_id = container.create_window((0, 0), window=content, anchor="nw")
+            # Set initial visibility
+            state = {"visible": bool(start_open), "animating": False}
+            if start_open:
+                try:
+                    container.pack(fill="x")
+                    content.update_idletasks()
+                    container.configure(height=max(1, content.winfo_reqheight() + 4))
+                except Exception:
+                    pass
+            # Keep container width synced
+            def _on_container_configure(event):
+                try:
+                    container.itemconfigure(inner_id, width=event.width)
+                except Exception:
+                    pass
+            container.bind("<Configure>", _on_container_configure)
+
+            def _animate_height(target_h: int, duration_ms: int = 280):
+                # Delegate to centralized time-based easing for consistency
+                try:
+                    self._animate_canvas_height(container, target_h, duration_ms, easing="cubic")
+                except Exception:
+                    try:
+                        container.configure(height=target_h)
+                    except Exception:
+                        pass
+
+            def accordion_open_me():
+                # For collapsible sections, close others first; for non-collapsible, don't affect others
+                if collapsible:
+                    for sec in accordion_sections:
+                        if sec["state"]["visible"] and sec["content"] is not content:
+                            try:
+                                if sec["state"].get("animating"):
+                                    continue
+                                sec["state"]["animating"] = True
+                                self._animate_canvas_height(
+                                    sec["container"],
+                                    0,
+                                    260,
+                                    easing="cubic",
+                                    mode="close",
+                                    on_done=lambda s=sec: (s["container"].pack_forget(), s["chevron"].configure(text=">"), s["state"].update({"visible": False, "animating": False}))
+                                )
+                                sec["chevron"].configure(text=">")
+                            except Exception:
+                                pass
+                # Open/resize this section
+                try:
+                    container.pack(fill="x")
+                    content.update_idletasks()
+                    target_h = content.winfo_reqheight() + 4
+                    state["animating"] = True
+                    self._animate_canvas_height(
+                        container,
+                        target_h,
+                        300,
+                        easing="cubic",
+                        mode="open",
+                        on_done=lambda: state.update({"animating": False})
+                    )
+                    chevron.configure(text="v")
+                    state["visible"] = True
+                except Exception:
+                    pass
+            def on_toggle():
+                if not collapsible:
+                    return
+                if state.get("animating"):
+                    return
+                if state["visible"]:
+                    try:
+                        # Animate close to zero height then hide
+                        state["animating"] = True
+                        def _done_close():
+                            try:
+                                container.pack_forget()
+                            except Exception:
+                                pass
+                            chevron.configure(text=">")
+                            state.update({"visible": False, "animating": False})
+                        self._animate_canvas_height(container, 0, 280, easing="cubic", mode="close", on_done=_done_close)
+                        chevron.configure(text=">")
+                    except Exception:
+                        pass
+                else:
+                    accordion_open_me()
+            # Make header clickable (title/chevron) only if collapsible
+            if collapsible:
+                for w in (header, title, chevron):
+                    try:
+                        w.bind("<Button-1>", lambda e: on_toggle())
+                        w.configure(cursor="hand2")
+                    except Exception:
+                        pass
+                accordion_sections.append({"header": header, "content": content, "container": container, "chevron": chevron, "state": state, "title": title_text})
+            return content, state, accordion_open_me
+
+        # Default rule (always open, non-collapsible) — show this first
+        def_frame, def_state, def_open = make_section(self.visual_inner, "Default rule", collapsible=False, start_open=True)
+        if enabled:
+            fallthrough = env_data.get("fallthrough", {})
+            v_idx = fallthrough.get("variation", 0)
+        else:
+            v_idx = env_data.get("offVariation", 1)
+        v_val = self.get_variation_value(v_idx, full_data)
+        ttk.Label(def_frame, text=f"Serve: {v_val}", font=("Segoe UI", 10), foreground=text_fg).pack(anchor="w", padx=12)
+        # Ensure the non-collapsible section resizes to fit its content
+        try:
+            def_open()
+        except Exception:
+            pass
+
+        # Targets and Rules sections
+        open_done = False
+        targets = env_data.get("targets", []) or []
+        if targets:
+            tgt_frame, tgt_state, tgt_open = make_section(self.visual_inner, "Targets")
+            for idx, t in enumerate(targets):
+                var_idx = t.get("variation", 0)
+                val = self.get_variation_value(var_idx, full_data)
+                vals = t.get("values", [])
+                row = ttk.Frame(tgt_frame)
+                row.pack(fill="x", pady=2, padx=12)
+                ttk.Label(row, text=f"Serve: {val}", font=("Segoe UI", 10, "bold"), foreground=text_fg).pack(side="left")
+                ttk.Label(row, text=f"for {len(vals)} user keys", font=("Segoe UI", 10), foreground=text_fg).pack(side="left", padx=(6,0))
+                # Matched tag
+                try:
+                    if match and match.get("type") == "target" and match.get("index") == idx:
+                        ttk.Label(row, text="Matched", bootstyle="success", font=("Segoe UI", 9, "bold")).pack(side="right")
+                except Exception:
+                    pass
+
+        # Rules section
+        rules = env_data.get("rules", []) or []
+        if rules:
+            rules_frame, rules_state, rules_open = make_section(self.visual_inner, "Rules")
+            for i, rule in enumerate(rules, start=1):
+                rf = ttk.Frame(rules_frame)
+                rf.pack(fill="x", pady=6, padx=8)
+                desc = rule.get("description") or f"Rule {i}"
+                var_idx = rule.get("variation", 0)
+                var_val = self.get_variation_value(var_idx, full_data)
+                header_row = ttk.Frame(rf)
+                header_row.pack(fill="x")
+                ttk.Label(header_row, text=desc, font=("Segoe UI", 10, "bold"), foreground=text_fg).pack(side="left")
+                # Matched tag
+                try:
+                    if match and match.get("type") == "rule" and match.get("index") == (i-1):
+                        ttk.Label(header_row, text="Matched", bootstyle="success", font=("Segoe UI", 9, "bold")).pack(side="right")
+                except Exception:
+                    pass
+                # Clauses summary
+                clauses = rule.get("clauses", [])
+                for cl in clauses:
+                    attr = cl.get("attribute", "attribute")
+                    op = cl.get("op", "in")
+                    values = cl.get("values", [])
+                    try:
+                        shown = ", ".join([str(v) for v in values[:5]]) + (" ..." if len(values) > 5 else "")
+                    except Exception:
+                        shown = str(values)
+                    # Readable inline clause line (high contrast)
+                    clause_line = ttk.Frame(rf)
+                    clause_line.pack(anchor="w", padx=12)
+                    ttk.Label(clause_line, text="If ", font=("Segoe UI", 10), foreground=text_fg).pack(side="left")
+                    ttk.Label(clause_line, text=str(attr), font=("Segoe UI", 10, "bold"), foreground=text_fg).pack(side="left")
+                    ttk.Label(clause_line, text=f" {op} ", font=("Segoe UI", 10), foreground=text_fg).pack(side="left")
+                    ttk.Label(clause_line, text=f"[ {shown} ]", font=("Segoe UI", 10), foreground=text_fg).pack(side="left")
+                ttk.Label(rf, text=f"Serve: {var_val}", font=("Segoe UI", 10, "bold"), foreground=text_fg).pack(anchor="w", padx=12, pady=(0,2))
+            # Open rules now so content appears right after the header
+            try:
+                rules_open()
+                open_done = True
+            except Exception:
+                pass
+
+        
+
 
     def animate_spinner(self):
         """Animate the loading spinner"""

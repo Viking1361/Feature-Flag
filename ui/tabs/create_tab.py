@@ -8,7 +8,7 @@ import traceback
 from datetime import datetime
 from shared.config_loader import LAUNCHDARKLY_API_KEY, PROJECT_KEY
 from api_config.api_endpoints import FeatureFlagEndpoints, APIHeaders, APIConfig
-from shared.constants import UPDATE_ENVIRONMENT_OPTIONS
+from shared.audit import audit_event
 
 # Configure logging for create tab
 logger = logging.getLogger(__name__)
@@ -164,72 +164,8 @@ class CreateTab:
         )
         self.create_tags_entry.pack(fill="x", pady=(0, 5))
 
-        # --- Configuration Section ---
-        config_container = ttk.Frame(create_frame)
-        config_container.pack(fill="x", pady=(0, 12))
-        
-        # Configuration card
-        config_frame = ttk.Frame(config_container, style="Content.TFrame")
-        config_frame.pack(fill="x", padx=5)
-        
-        # Card header
-        config_header = ttk.Frame(config_frame)
-        config_header.pack(fill="x", padx=16, pady=(10, 8))
-        
-        config_title = ttk.Label(
-            config_header,
-            text="⚙️ Configuration",
-            font=("Segoe UI", 16, "bold"),
-            foreground=self.theme_manager.get_theme_config()["colors"]["text"]
-        )
-        config_title.pack(anchor="w")
-
-        # Configuration form
-        config_form = ttk.Frame(config_frame)
-        config_form.pack(fill="x", padx=16, pady=(0, 12))
-        
-        # Environment selection
-        env_frame = ttk.Frame(config_form)
-        env_frame.pack(fill="x", pady=6)
-        
-        env_label = ttk.Label(
-            env_frame, 
-            text="🌍 Environment (Production excluded for safety)", 
-            font=("Segoe UI", 11, "bold"),
-            foreground=self.theme_manager.get_theme_config()["colors"]["text"]
-        )
-        env_label.pack(anchor="w", pady=(0, 5))
-        
-        self.create_env_var = tk.StringVar(value="DEV")
-        env_combo = ttk.Combobox(
-            env_frame, 
-            textvariable=self.create_env_var,
-            values=UPDATE_ENVIRONMENT_OPTIONS,
-            font=("Segoe UI", 11),
-            state="readonly"
-        )
-        env_combo.pack(fill="x", pady=(0, 5))
-
-        # Removed 'Default Value' toggle per request. The flag will be created OFF by default for safety.
-
-        # Fallthrough / offVariation selection
-        fallthrough_frame = ttk.Frame(config_form)
-        fallthrough_frame.pack(fill="x", pady=6)
-        ttk.Label(
-            fallthrough_frame,
-            text="Default rule (fallthrough):",
-            font=("Segoe UI", 11, "bold"),
-            foreground=self.theme_manager.get_theme_config()["colors"]["text"]
-        ).pack(anchor="w", pady=(0, 5))
-        self.create_fallthrough_var = tk.StringVar(value="True")
-        self.create_fallthrough_combo = ttk.Combobox(
-            fallthrough_frame,
-            textvariable=self.create_fallthrough_var,
-            values=["True", "False"],
-            state="readonly",
-            font=("Segoe UI", 11)
-        )
-        self.create_fallthrough_combo.pack(anchor="w")
+        # Note: Removed Configuration section (environment and fallthrough). We now default to
+        # environment = DEV and default fallthrough = False for safety.
 
         # --- Action Buttons ---
         buttons_container = ttk.Frame(create_frame)
@@ -334,7 +270,8 @@ class CreateTab:
         flag_name = self.create_name_var.get().strip()
         description = self.create_desc_var.get().strip()
         tags = self.create_tags_var.get().strip()
-        environment = self.create_env_var.get()
+        # No environment specified during creation; exclude env-specific config from payload
+        environment = ""
 
         # Debug: Log all form data
         form_data = {
@@ -370,9 +307,9 @@ class CreateTab:
 
             if success:
                 success_msg = f"Feature flag '{flag_key}' created successfully!"
-                detail_msg = f"Flag '{flag_key}' has been created in the {environment} environment."
+                detail_msg = f"Flag '{flag_key}' has been created."
 
-                logger.info(f"Feature flag created successfully: {flag_key} in {environment}")
+                logger.info(f"Feature flag created successfully: {flag_key}")
 
                 # Update UI
                 self.create_status_var.set(success_msg)
@@ -382,12 +319,25 @@ class CreateTab:
                 messagebox.showinfo(
                     "Success!", 
                     f"Feature flag '{flag_key}' has been successfully created!\n\n"
-                    f"Environment: {environment}\n"
                     f"Description: {description or 'No description provided'}\n"
                     f"Tags: {tags or 'No tags provided'}"
                 )
 
                 self.reset_create_fields()
+                # Audit success
+                try:
+                    audit_event(
+                        "create_flag",
+                        {
+                            "feature_key": flag_key,
+                            "environment": environment,
+                            "name": flag_name,
+                            "tags": tags,
+                        },
+                        ok=True,
+                    )
+                except Exception:
+                    pass
             else:
                 error_msg = "Failed to create feature flag"
                 detail_msg = f"An error occurred while creating the feature flag. Response: {response_data}"
@@ -402,6 +352,20 @@ class CreateTab:
                     f"Failed to create feature flag '{flag_key}'.\n\n"
                     f"Please check the details in the status area below and try again."
                 )
+                # Audit failure
+                try:
+                    audit_event(
+                        "create_flag",
+                        {
+                            "feature_key": flag_key,
+                            "environment": environment,
+                            "name": flag_name,
+                            "error": str(response_data),
+                        },
+                        ok=False,
+                    )
+                except Exception:
+                    pass
 
         except Exception as e:
             error_msg = f"Exception occurred: {str(e)}"
@@ -416,6 +380,20 @@ class CreateTab:
                 f"An unexpected error occurred:\n\n{str(e)}\n\n"
                 f"Please check the console/logs for more details."
             )
+            # Audit exception
+            try:
+                audit_event(
+                    "create_flag",
+                    {
+                        "feature_key": flag_key,
+                        "environment": environment,
+                        "name": flag_name,
+                        "error": str(e),
+                    },
+                    ok=False,
+                )
+            except Exception:
+                pass
 
         # Hide loading indicator and re-enable button
         logger.info("Cleaning up UI after flag creation attempt")
@@ -436,7 +414,7 @@ class CreateTab:
 
         logger.debug(f"API URL: {url}")
 
-        # Prepare the flag data
+        # Prepare the flag data WITHOUT any environment-specific configuration
         flag_data = {
             "key": flag_key,
             "name": flag_name,
@@ -447,28 +425,13 @@ class CreateTab:
                 {"value": False}
             ],
             "defaults": {
-                # Will be set to the selected fallthrough variation below
+                # Will be set to the desired fallthrough variation below
                 "onVariation": 0,
                 "offVariation": 1
-            },
-            "environments": {
-                environment: {
-                    # Create flags OFF by default for safety
-                    "on": False,
-                    "archived": False,
-                    "salt": f"{flag_key}-{environment}",
-                    "prerequisites": [],
-                    "targets": [],
-                    "rules": [],
-                    "fallthrough": {
-                        # Will be set to the selected fallthrough variation below
-                        "variation": 0
-                    }
-                }
             }
         }
 
-        # Apply selected fallthrough/offVariation to payload
+        # Apply default fallthrough/offVariation to payload (Default Disabled = False)
         try:
             variations = flag_data.get("variations", [])
             true_index = 0
@@ -478,17 +441,13 @@ class CreateTab:
                     true_index = i
                 elif v.get("value") is False:
                     false_index = i
-            desired = (self.create_fallthrough_var.get() or "True").strip().lower()
-            desired_index = true_index if desired == "true" else false_index
-            # Set environment fallthrough to selected variation
-            flag_data["environments"][environment]["fallthrough"] = {"variation": desired_index}
-            # Set defaults on/off variation and env offVariation to selected variation
+            desired_index = false_index  # Default to Disabled for safety
+            # Set project-level defaults only (no environment payload)
             flag_data["defaults"]["onVariation"] = desired_index
             flag_data["defaults"]["offVariation"] = desired_index
-            flag_data["environments"][environment]["offVariation"] = desired_index
-            logger.debug(f"Create: fallthrough set to {desired} (index {desired_index}); offVariation set to index {desired_index}")
+            logger.debug(f"Create: defaults set to Disabled (index {desired_index})")
         except Exception as e:
-            logger.debug(f"Create: skipped applying fallthrough/offVariation selection due to: {e}")
+            logger.debug(f"Create: skipped applying default fallthrough/offVariation due to: {e}")
 
         # Add tags if provided
         if tags:
@@ -558,7 +517,6 @@ class CreateTab:
         self.create_name_var.set("")
         self.create_desc_var.set("")
         self.create_tags_var.set("")
-        self.create_env_var.set("DEV")
         # Removed: self.create_default_var (Default Value toggle)
         self.create_status_var.set("")
         self.create_result_label.config(text="")
