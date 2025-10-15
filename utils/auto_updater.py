@@ -47,6 +47,11 @@ class AutoUpdater:
         self.load_settings()
         # Log token status once on init for diagnostics
         _log_token_status()
+        # Attempt to clean up any stale updater artifacts from previous runs
+        try:
+            self._cleanup_stale_swap_artifacts()
+        except Exception:
+            pass
     
     def load_settings(self):
         """Load update settings from file"""
@@ -446,9 +451,12 @@ class AutoUpdater:
                                     f"set \"TARGET={str(target_exe)}\"\r\n"
                                     f"set \"NEW={str(new_exe)}\"\r\n"
                                     f"set \"BACKUP={str(backup_exe)}\"\r\n"
+                                    "set /a _tries=0\r\n"
                                     ":wait\r\n"
+                                    "set /a _tries+=1\r\n"
                                     "move /y \"%TARGET%\" \"%BACKUP%\" >nul 2>&1\r\n"
                                     "if errorlevel 1 (\r\n"
+                                    "  if %_tries% GEQ 60 goto fallback\r\n"
                                     "  timeout /t 1 /nobreak >nul\r\n"
                                     "  goto wait\r\n"
                                     ")\r\n"
@@ -457,6 +465,11 @@ class AutoUpdater:
                                     "del /f /q \"%BACKUP%\" >nul 2>&1\r\n"
                                     "del /f /q \"%~f0\" >nul 2>&1\r\n"
                                     "endlocal\r\n"
+                                    "exit /b 0\r\n"
+                                    ":fallback\r\n"
+                                    "rem Could not swap after retries; launch NEW side-by-side\r\n"
+                                    "start \"\" \"%NEW%\"\r\n"
+                                    "exit /b 0\r\n"
                                 )
                                 try:
                                     with open(script_path, "w", encoding="utf-8") as f:
@@ -473,7 +486,11 @@ class AutoUpdater:
                                     "The application will close and restart with the new version."
                                 )
                                 try:
-                                    subprocess.Popen(["cmd.exe", "/c", str(script_path)])
+                                    # Launch swap script hidden to avoid a visible cmd window
+                                    creationflags = 0
+                                    if os.name == "nt":
+                                        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                                    subprocess.Popen(["cmd.exe", "/c", str(script_path)], creationflags=creationflags)
                                 except Exception as perr:
                                     logger.error(f"Updater: failed to start swap script: {perr}")
                                     # Fallback to temp
@@ -522,6 +539,27 @@ class AutoUpdater:
                                 # Fallback to running from temp
                                 subprocess.Popen([temp_path])
                                 sys.exit(0)
+
+                            # Optionally clean up older versioned EXEs in the same folder
+                            try:
+                                others = [p for p in dest_dir.glob("FeatureFlagManager-v*.exe") if p != dest_path]
+                            except Exception:
+                                others = []
+                            if others:
+                                try:
+                                    do_cleanup = messagebox.askyesno(
+                                        "Cleanup Old Versions",
+                                        f"Found {len(others)} older versioned executables.\n\nDelete them now?",
+                                        icon="question",
+                                    )
+                                    if do_cleanup:
+                                        for p in others:
+                                            try:
+                                                p.unlink()
+                                            except Exception:
+                                                pass
+                                except Exception:
+                                    pass
 
                             # Ask to launch the new side-by-side EXE
                             launch_new = messagebox.askyesno(
@@ -610,3 +648,54 @@ def get_updater(parent_window=None):
     elif parent_window and not _updater_instance.parent_window:
         _updater_instance.parent_window = parent_window
     return _updater_instance
+
+def _try_delete(path: Path) -> None:
+    try:
+        if path and path.exists():
+            path.unlink()
+    except Exception:
+        pass
+
+def _safe_parent(p: Path) -> Path:
+    try:
+        return p.parent
+    except Exception:
+        return Path.cwd()
+
+def _samefile(a: Path, b: Path) -> bool:
+    try:
+        return a.resolve() == b.resolve()
+    except Exception:
+        return str(a) == str(b)
+
+def _is_frozen_exe() -> bool:
+    try:
+        return os.name == "nt" and getattr(sys, "frozen", False)
+    except Exception:
+        return False
+
+def _current_exe_paths():
+    try:
+        if not _is_frozen_exe():
+            return None, None, None
+        target = Path(sys.executable)
+        dest_dir = _safe_parent(target)
+        suffix = target.suffix or ".exe"
+        newp = dest_dir / f"{target.stem}-new{suffix}"
+        back = dest_dir / f"{target.stem}-backup{suffix}"
+        return target, newp, back
+    except Exception:
+        return None, None, None
+
+def _cleanup_stale_swap_artifacts_impl():
+    target, newp, back = _current_exe_paths()
+    if not target:
+        return
+    _try_delete(newp)
+    _try_delete(back)
+
+def AutoUpdater__cleanup_stale_swap_artifacts(self):
+    _cleanup_stale_swap_artifacts_impl()
+
+# Bind as method without changing public API
+setattr(AutoUpdater, "_cleanup_stale_swap_artifacts", AutoUpdater__cleanup_stale_swap_artifacts)
