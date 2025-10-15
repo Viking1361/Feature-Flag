@@ -443,26 +443,39 @@ class AutoUpdater:
                                     sys.exit(0)
 
                                 # Create swap script in destination directory
+                                old_pid = os.getpid()
                                 script_name = f"ffm_swap_{int(time.time())}.cmd"
                                 script_path = dest_dir / script_name
+                                vbs_name = f"ffm_run_hidden_{int(time.time())}.vbs"
+                                vbs_path = dest_dir / vbs_name
                                 bat = (
                                     "@echo off\r\n"
                                     "setlocal\r\n"
                                     f"set \"TARGET={str(target_exe)}\"\r\n"
                                     f"set \"NEW={str(new_exe)}\"\r\n"
                                     f"set \"BACKUP={str(backup_exe)}\"\r\n"
+                                    f"set \"VBS={str(vbs_path)}\"\r\n"
+                                    f"set \"OLDPID={old_pid}\"\r\n"
+                                    "rem Wait for old process to fully exit before swapping\r\n"
+                                    ":wait_old\r\n"
+                                    "tasklist /FI \"PID eq %OLDPID%\" | find \"%OLDPID%\" >nul\r\n"
+                                    "if not errorlevel 1 (\r\n"
+                                    "  timeout /t 1 /nobreak >nul\r\n"
+                                    "  goto wait_old\r\n"
+                                    ")\r\n"
                                     "set /a _tries=0\r\n"
                                     ":wait\r\n"
                                     "set /a _tries+=1\r\n"
                                     "move /y \"%TARGET%\" \"%BACKUP%\" >nul 2>&1\r\n"
                                     "if errorlevel 1 (\r\n"
-                                    "  if %_tries% GEQ 60 goto fallback\r\n"
+                                    "  if %_tries% GEQ 30 goto fallback\r\n"
                                     "  timeout /t 1 /nobreak >nul\r\n"
                                     "  goto wait\r\n"
                                     ")\r\n"
                                     "move /y \"%NEW%\" \"%TARGET%\" >nul 2>&1\r\n"
                                     "start \"\" \"%TARGET%\"\r\n"
                                     "del /f /q \"%BACKUP%\" >nul 2>&1\r\n"
+                                    "if exist \"%VBS%\" del /f /q \"%VBS%\" >nul 2>&1\r\n"
                                     "del /f /q \"%~f0\" >nul 2>&1\r\n"
                                     "endlocal\r\n"
                                     "exit /b 0\r\n"
@@ -480,17 +493,35 @@ class AutoUpdater:
                                     subprocess.Popen([temp_path])
                                     sys.exit(0)
 
+                                # Write a tiny VBScript launcher to run cmd hidden (windowstyle=0)
+                                try:
+                                    escaped = str(script_path).replace('"', '""')
+                                    vbs = (
+                                        "On Error Resume Next\r\n"
+                                        "Set sh = CreateObject(\"WScript.Shell\")\r\n"
+                                        f"cmd = \"cmd.exe /c \"\"{escaped}\"\"\"\r\n"
+                                        "sh.Run cmd, 0, False\r\n"
+                                    )
+                                    with open(vbs_path, "w", encoding="utf-8") as vf:
+                                        vf.write(vbs)
+                                    logger.info(f"Updater: wrote hidden runner {vbs_path}")
+                                except Exception as verr:
+                                    logger.error(f"Updater: failed to write hidden runner: {verr}")
+
                                 # Inform user and launch swap script
                                 messagebox.showinfo(
                                     "Installing Update",
                                     "The application will close and restart with the new version."
                                 )
                                 try:
-                                    # Launch swap script hidden to avoid a visible cmd window
+                                    # Prefer launching via wscript (hidden) if VBScript exists
                                     creationflags = 0
                                     if os.name == "nt":
                                         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-                                    subprocess.Popen(["cmd.exe", "/c", str(script_path)], creationflags=creationflags)
+                                    if os.name == "nt" and vbs_path.exists():
+                                        subprocess.Popen(["wscript.exe", str(vbs_path)], creationflags=creationflags)
+                                    else:
+                                        subprocess.Popen(["cmd.exe", "/c", str(script_path)], creationflags=creationflags)
                                 except Exception as perr:
                                     logger.error(f"Updater: failed to start swap script: {perr}")
                                     # Fallback to temp
