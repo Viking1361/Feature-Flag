@@ -10,6 +10,7 @@ from shared.config_loader import LOG_FILE, LAUNCHDARKLY_API_KEY, PROJECT_KEY
 from api_config.api_endpoints import FeatureFlagEndpoints, APIHeaders, APIConfig, URLBuilder
 from shared.constants import UPDATE_ENVIRONMENT_OPTIONS, ENVIRONMENT_MAPPINGS
 from api_client import get_client
+from shared.audit import audit_event
 
 # Module logger for this UI module
 logger = logging.getLogger(__name__)
@@ -227,14 +228,24 @@ class UpdateTab:
         options_container = ttk.Frame(action_frame)
         options_container.pack(fill="x", pady=(0, 6))
         ttk.Label(options_container, text="Default rule (fallthrough):").pack(anchor="w")
-        self.fallthrough_option_var = tk.StringVar(value="No change")
+        self.fallthrough_option_var = tk.StringVar(value="No value")
         self.fallthrough_option_combo = ttk.Combobox(
             options_container,
             textvariable=self.fallthrough_option_var,
-            values=["No change", "True", "False"],
+            values=["No value", "True", "False"],
             state="readonly"
         )
         self.fallthrough_option_combo.pack(anchor="w")
+
+        # New: Allow applying default rule independently of ON/OFF
+        self.apply_fallthrough_button = ttk.Button(
+            options_container,
+            text="Apply Default Rule",
+            bootstyle="info",
+            width=20,
+            command=self.apply_default_rule
+        )
+        self.apply_fallthrough_button.pack(anchor="w", pady=(6, 0))
 
         # Centered button layout
         button_container = ttk.Frame(action_frame)
@@ -440,8 +451,8 @@ class UpdateTab:
                 message = f"Flag '{feature_key}' {'enabled' if enable else 'disabled'} globally in {environment}"
                 response_data["api_responses"] = [{"operation": "standard_toggle", "success": success, "message": message}]
             
-            # If user requested to set default rule (fallthrough) to True and we are enabling,
-            # apply a follow-up JSON Patch to set fallthrough even on the standard path.
+            # If user requested to set default rule (fallthrough) to True/False and we are enabling,
+            # apply a follow-up JSON Patch to set fallthrough even on the standard path and audit it.
             try:
                 desired = ""
                 if getattr(self, 'fallthrough_option_var', None):
@@ -455,6 +466,21 @@ class UpdateTab:
                             "operation": "fallthrough_update",
                             "success": ft_success
                         })
+                        # Audit default rule update for Notifications tab
+                        try:
+                            actual_env = ENVIRONMENT_MAPPINGS.get(environment, environment)
+                            audit_event(
+                                "default_rule_update",
+                                {
+                                    "feature_key": feature_key,
+                                    "environment": actual_env,
+                                    "enabled": True if desired == "true" else False,
+                                    "note": "fallthrough/offVariation updated after toggle",
+                                },
+                                ok=bool(ft_success),
+                            )
+                        except Exception:
+                            pass
                         if not ft_success:
                             logger.error("Failed to update fallthrough variation after standard toggle")
             except Exception as e:
@@ -535,6 +561,116 @@ class UpdateTab:
         self.loading_frame.pack_forget()
         self.update_on_button.config(state="normal")
         self.update_off_button.config(state="normal")
+
+    def apply_default_rule(self):
+        """Apply only the default rule (fallthrough/offVariation) without toggling ON/OFF."""
+        feature_key = self.update_key_var.get().strip()
+        environment = self.environment_entry.get()
+        desired_raw = (self.fallthrough_option_var.get() or "").strip().lower()
+
+        if not feature_key:
+            messagebox.showwarning("Warning", "Please enter a feature flag key.")
+            return
+
+        if desired_raw not in ("true", "false"):
+            messagebox.showwarning("Warning", "Choose True or False under 'Default rule (fallthrough)'.")
+            return
+
+        # Show loading indicator
+        self.loading_frame.pack(pady=10)
+        self.update_loading_var.set(f"Applying default rule for {feature_key} in {environment}...")
+        self.parent.update_idletasks()
+
+        try:
+            # Clear previous response
+            self.update_response_box(None)
+
+            response_data = {
+                "operation": "fallthrough_update_only",
+                "timestamp": datetime.now().isoformat(),
+                "request": {
+                    "feature_key": feature_key,
+                    "environment": environment,
+                    "action": "fallthrough_update",
+                    "pmc_id": None,
+                    "site_id": None
+                },
+                "api_responses": []
+            }
+
+            flag_data = self.get_flag_configuration(feature_key)
+            if not flag_data:
+                self.update_loading_var.set("Error retrieving flag configuration")
+                self.update_result_label.config(text="Could not retrieve flag configuration.")
+                response_data["success"] = False
+                response_data["error"] = "Could not retrieve flag configuration"
+                self.update_response_box(response_data)
+                return
+
+            # Apply configuration update without forcing the flag ON and without resetting inputs
+            success = self.update_flag_configuration(
+                feature_key,
+                flag_data,
+                environment,
+                ensure_on=False,
+                reset_fields=False
+            )
+
+            response_data["success"] = success
+            response_data["result_message"] = "Default rule updated" if success else "Failed to update default rule"
+            self.update_response_box(response_data)
+
+            if success:
+                self.update_loading_var.set(f"✅ Default rule updated for {feature_key}")
+                self.update_result_label.config(text=f"Fallthrough/offVariation set in {environment}")
+                logger.info(f"Default rule updated for key={feature_key} env={environment}")
+                # Audit to Notifications tab
+                try:
+                    actual_env = ENVIRONMENT_MAPPINGS.get(environment, environment)
+                    audit_event(
+                        "default_rule_update",
+                        {
+                            "feature_key": feature_key,
+                            "environment": actual_env,
+                            "enabled": True if desired_raw == "true" else False,
+                            "note": "fallthrough/offVariation updated via Apply Default Rule",
+                        },
+                        ok=True,
+                    )
+                except Exception:
+                    pass
+                # Reset the dropdown to 'No value' after success
+                try:
+                    if hasattr(self, 'fallthrough_option_var'):
+                        self.fallthrough_option_var.set("No value")
+                except Exception:
+                    pass
+            else:
+                self.update_loading_var.set("❌ Failed to update default rule")
+                self.update_result_label.config(text=f"Failed to update default rule for '{feature_key}' in {environment}")
+                logger.error(f"Failed to update default rule for key={feature_key} env={environment}")
+                # Audit failure
+                try:
+                    actual_env = ENVIRONMENT_MAPPINGS.get(environment, environment)
+                    audit_event(
+                        "default_rule_update",
+                        {
+                            "feature_key": feature_key,
+                            "environment": actual_env,
+                            "enabled": True if desired_raw == "true" else False,
+                            "note": "fallthrough/offVariation update failed",
+                        },
+                        ok=False,
+                    )
+                except Exception:
+                    pass
+
+        except Exception as e:
+            self.update_loading_var.set(f"❌ Error: {str(e)}")
+            self.update_result_label.config(text=str(e))
+            logger.exception(f"Exception applying default rule: {str(e)}")
+        finally:
+            self.loading_frame.pack_forget()
 
     def update_flag_with_pmcid_targeting(self, feature_key, environment, pmcid, siteid, enable):
         """Update flag with intelligent PMC ID targeting"""
@@ -741,8 +877,8 @@ class UpdateTab:
                     "message": "PMC ID already in correct state"
                 })
 
-                # If user requested to set default rule (fallthrough) to True and we are enabling,
-                # apply a follow-up JSON Patch to set fallthrough even when no rule changes are needed.
+                # If user requested to set default rule (fallthrough) to True/False and we are enabling,
+                # apply a follow-up JSON Patch to set fallthrough even when no rule changes are needed and audit it.
                 try:
                     desired = ""
                     if getattr(self, 'fallthrough_option_var', None):
@@ -754,6 +890,21 @@ class UpdateTab:
                             "operation": "fallthrough_update",
                             "success": ft_success
                         })
+                        # Audit default rule update for Notifications tab
+                        try:
+                            actual_env = ENVIRONMENT_MAPPINGS.get(environment, environment)
+                            audit_event(
+                                "default_rule_update",
+                                {
+                                    "feature_key": feature_key,
+                                    "environment": actual_env,
+                                    "enabled": True if desired == "true" else False,
+                                    "note": "fallthrough/offVariation updated in intelligent path",
+                                },
+                                ok=bool(ft_success),
+                            )
+                        except Exception:
+                            pass
                         if not ft_success:
                             logger.error("Failed to update fallthrough variation in intelligent path (no changes needed)")
                 except Exception as e:
@@ -814,8 +965,13 @@ class UpdateTab:
             logger.exception(f"Exception getting flag configuration: {str(e)}")
             return None
 
-    def update_flag_configuration(self, feature_key, flag_data, environment, rule_index_to_update=-1, rule_to_apply=None, additional_operations=None):
-        """Update flag configuration in LaunchDarkly using JSON Patch operations with user attribution"""
+    def update_flag_configuration(self, feature_key, flag_data, environment, rule_index_to_update=-1, rule_to_apply=None, additional_operations=None, ensure_on=True, reset_fields=True):
+        """Update flag configuration in LaunchDarkly using JSON Patch operations with user attribution.
+
+        Parameters:
+        - ensure_on: If True, force the flag's 'on' state to True. If False, do not modify the 'on' state.
+        - reset_fields: If True, reset the Update tab fields after success. Useful to keep context when only editing fallthrough.
+        """
         from shared.user_session import get_api_comment
         try:
             url = URLBuilder.build_flag_url(PROJECT_KEY, feature_key)
@@ -843,12 +999,13 @@ class UpdateTab:
                 # Fallback to defaults if variations are unexpected
                 pass
 
-            # Ensure flag is turned ON
-            patch_operations.append({
-                "op": "replace",
-                "path": f"/environments/{actual_env}/on",
-                "value": True
-            })
+            # Optionally ensure flag is turned ON
+            if ensure_on:
+                patch_operations.append({
+                    "op": "replace",
+                    "path": f"/environments/{actual_env}/on",
+                    "value": True
+                })
 
             # Optionally set default rule (fallthrough) to True/False based on UI selection
             try:
@@ -927,7 +1084,8 @@ class UpdateTab:
 
             if response.status_code in [200, 204]:
                 logger.info("Successfully updated flag configuration")
-                self.reset_update_fields()
+                if reset_fields:
+                    self.reset_update_fields()
                 return True
             else:
                 try:
@@ -959,6 +1117,12 @@ class UpdateTab:
             self.environment_entry.set("DEV")
             self.pmcid_var.set("")
             self.siteid_var.set("")
+            # Reset fallthrough selection to 'No value'
+            try:
+                if hasattr(self, 'fallthrough_option_var'):
+                    self.fallthrough_option_var.set("No value")
+            except Exception:
+                pass
 
             # Reset status labels and loading UI
             self.update_result_label.config(text="")
