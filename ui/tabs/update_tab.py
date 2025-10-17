@@ -778,6 +778,49 @@ class UpdateTab:
                 success = True
                 rule_to_apply = None
                 rule_index_to_update = -1
+                # DEDUPE: ensure PMC is not present in the opposite rule
+                try:
+                    patches_needed = []
+                    if source_rule_index >= 0:
+                        src_rule = rules[source_rule_index].copy()
+                        for clause in src_rule.get("clauses", []):
+                            if clause.get("attribute") == "PmcId":
+                                vals = clause.get("values", [])
+                                new_vals = [v for v in vals if v != pmcid_int and v != str(pmcid_int)]
+                                if len(new_vals) != len(vals):
+                                    clause["values"] = new_vals
+                                    if not new_vals:
+                                        # Remove empty rule entirely
+                                        patches_needed.append({
+                                            "op": "remove",
+                                            "path": f"/environments/{actual_env}/rules/{source_rule_index}"
+                                        })
+                                    else:
+                                        # Replace the opposite rule with the updated values
+                                        patches_needed.append({
+                                            "op": "replace",
+                                            "path": f"/environments/{actual_env}/rules/{source_rule_index}",
+                                            "value": src_rule
+                                        })
+                                break
+                    if patches_needed:
+                        dedupe_ok = self.update_flag_configuration(
+                            feature_key,
+                            flag_data,
+                            environment,
+                            rule_index_to_update=-1,
+                            rule_to_apply=None,
+                            additional_operations=patches_needed
+                        )
+                        api_responses.append({
+                            "operation": "dedupe_source_rule",
+                            "success": bool(dedupe_ok),
+                            "message": "Removed PMC from opposite rule to avoid duplication"
+                        })
+                        if dedupe_ok:
+                            action_description += " | deduped in opposite rule"
+                except Exception as _e:
+                    logger.debug(f"Dedupe check error: {_e}")
             elif current_pmcid_rule_index == -1 and target_rule_index == -1:
                 # No PMC rules exist yet - create the first standard rule
                 logger.debug("No PMC targeting rules exist yet, creating first standard rule")
@@ -807,7 +850,7 @@ class UpdateTab:
                             remaining_pmcs = new_values
                             break
                     
-                    # SMART RULING: Delete empty rule instead of keeping it
+                    # SMART RULING: Delete empty rule instead of keeping it; otherwise, replace the rule without the PMC
                     if not remaining_pmcs:
                         logger.debug(f"SMART RULING - Source rule will be empty, deleting entire rule at index {current_pmcid_rule_index}")
                         # Get the actual rule ID (UUID) from the rule
@@ -824,6 +867,13 @@ class UpdateTab:
                         if target_rule_index > current_pmcid_rule_index:
                             adjusted_target_rule_index = target_rule_index - 1
                             logger.debug(f"Adjusted target rule index from {target_rule_index} to {adjusted_target_rule_index}")
+                    else:
+                        logger.debug("Updating source rule to remove PMC without deleting entire rule")
+                        patches_needed.append({
+                            "op": "replace",
+                            "path": f"/environments/{actual_env}/rules/{current_pmcid_rule_index}",
+                            "value": source_rule
+                        })
                 # Step 2: Add to or create target rule
                 if adjusted_target_rule_index >= 0:
                     # Add to existing target rule
@@ -911,9 +961,40 @@ class UpdateTab:
                     logger.exception(f"Exception applying fallthrough update in intelligent path: {str(e)}")
 
             if success:
+                # Audit concise summary for Notifications tab
+                try:
+                    audit_event(
+                        "pmc_targeting_update",
+                        {
+                            "feature_key": feature_key,
+                            "environment": actual_env,
+                            "enabled": bool(enable),
+                            "pmc_id": str(pmcid_int),
+                            "site_id": str(siteid) if siteid else "",
+                            "summary": action_description,
+                        },
+                        ok=True,
+                    )
+                except Exception:
+                    pass
                 return True, action_description, api_responses
             else:
                 api_responses.append({"operation": "final_result", "success": False, "error": "Failed to apply targeting rule changes"})
+                try:
+                    audit_event(
+                        "pmc_targeting_update",
+                        {
+                            "feature_key": feature_key,
+                            "environment": actual_env,
+                            "enabled": bool(enable),
+                            "pmc_id": str(pmcid_int),
+                            "site_id": str(siteid) if siteid else "",
+                            "summary": "Failed to apply targeting rule changes",
+                        },
+                        ok=False,
+                    )
+                except Exception:
+                    pass
                 return False, "Failed to apply targeting rule changes", api_responses
                 
         except Exception as e:

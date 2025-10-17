@@ -161,9 +161,72 @@ class FeatureFlagApp:
         self.tab_buttons_frame.pack(side="left", fill="y", padx=(0, 15))
         self.tab_buttons_frame.pack_propagate(False)  # Maintain fixed width
 
-        # Right panel for tab content
-        self.content_frame = ttk.Frame(container, style="Content.TFrame")
-        self.content_frame.pack(side="right", fill="both", expand=True)
+        # Right panel for tab content (scrollable)
+        # Outer container holds the canvas + scrollbar
+        self.content_frame_container = ttk.Frame(container, style="Content.TFrame")
+        self.content_frame_container.pack(side="right", fill="both", expand=True)
+
+        # Canvas for scrolling and a vertical scrollbar
+        colors = self.theme_manager.get_theme_config()["colors"]
+        self.content_canvas = tk.Canvas(
+            self.content_frame_container,
+            highlightthickness=0,
+            bd=0,
+            bg=colors.get("background", "white"),
+        )
+        self.content_vscroll = ttk.Scrollbar(
+            self.content_frame_container, orient="vertical", command=self.content_canvas.yview
+        )
+        self.content_canvas.configure(yscrollcommand=self.content_vscroll.set)
+        self.content_canvas.pack(side="left", fill="both", expand=True)
+        self.content_vscroll.pack(side="right", fill="y")
+
+        # Inner frame that actually holds tab content frames
+        self.content_frame = ttk.Frame(self.content_canvas, style="Content.TFrame")
+        self._canvas_window = self.content_canvas.create_window((0, 0), window=self.content_frame, anchor="nw")
+
+        # Keep scrollregion and width in sync
+        def _on_inner_configure(event=None):
+            try:
+                self.content_canvas.configure(scrollregion=self.content_canvas.bbox("all"))
+            except Exception:
+                pass
+
+        def _on_canvas_configure(event):
+            try:
+                # Make the inner frame width match the visible canvas width
+                self.content_canvas.itemconfig(self._canvas_window, width=event.width)
+            except Exception:
+                pass
+
+        self.content_frame.bind("<Configure>", _on_inner_configure)
+        self.content_canvas.bind("<Configure>", _on_canvas_configure)
+
+        # Mouse wheel support (Windows)
+        def _on_mousewheel(event):
+            try:
+                # If hovering a widget that handles its own vertical scroll, let it handle it
+                cls = str(getattr(event.widget, 'winfo_class', lambda: '')())
+                if cls in ("Text", "Treeview", "Listbox"):
+                    return
+                self.content_canvas.yview_scroll(-int(event.delta/120), "units")
+            except Exception:
+                pass
+
+        def _bind_wheel(_event=None):
+            try:
+                self.content_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            except Exception:
+                pass
+
+        def _unbind_wheel(_event=None):
+            try:
+                self.content_canvas.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+
+        self.content_frame.bind("<Enter>", _bind_wheel)
+        self.content_frame.bind("<Leave>", _unbind_wheel)
 
         # Create tab buttons and content frames
         self.tab_buttons = {}
@@ -277,6 +340,16 @@ class FeatureFlagApp:
         # Show selected content frame
         self.tab_frames[tab_id].pack(fill="both", expand=True)
 
+        # Reset scroll to top when switching tabs
+        try:
+            if hasattr(self, "content_canvas"):
+                self.content_canvas.yview_moveto(0)
+                # Ensure scrollregion is up-to-date
+                self.content_canvas.update_idletasks()
+                self.content_canvas.configure(scrollregion=self.content_canvas.bbox("all"))
+        except Exception:
+            pass
+
         # Highlight selected button
         self.tab_buttons[tab_id].configure(bootstyle="primary")
 
@@ -312,6 +385,12 @@ class FeatureFlagApp:
         # Update text colors if log tab exists
         if hasattr(self.tab_instances, 'log') and hasattr(self.tab_instances['log'], 'update_text_colors'):
             self.tab_instances['log'].update_text_colors()
+        # Update scrollable content canvas bg
+        try:
+            if hasattr(self, 'content_canvas') and self.content_canvas:
+                self.content_canvas.configure(bg=colors.get("background", "white"))
+        except Exception:
+            pass
         
         # Update sidebar title if it exists
         if hasattr(self, 'sidebar_title'):

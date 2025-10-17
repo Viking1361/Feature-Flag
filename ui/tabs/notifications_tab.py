@@ -88,14 +88,28 @@ class NotificationsTab:
         ttk.Checkbutton(filters, text="OK only", variable=self.filter_ok_only, bootstyle="round-toggle").pack(side="left", padx=(4, 12))
         ttk.Label(filters, text="Type:", font=("Segoe UI", 10), foreground=colors["text"]).pack(side="left", padx=(12, 0))
         self.filter_type_var = tk.StringVar(value="Any")
-        ttk.Combobox(filters, textvariable=self.filter_type_var, values=["Any", "feature_flag_change", "get_flag", "update_flag", "create_flag"], state="readonly", width=14).pack(side="left", padx=(6, 12))
+        ttk.Combobox(
+            filters,
+            textvariable=self.filter_type_var,
+            values=[
+                "Any",
+                "feature_flag_change",
+                "get_flag",
+                "update_flag",
+                "create_flag",
+                "default_rule_update",
+                "pmc_targeting_update",
+            ],
+            state="readonly",
+            width=22,
+        ).pack(side="left", padx=(6, 12))
         ttk.Button(filters, text="Refresh", width=10, command=self.on_refresh_history).pack(side="left")
         ttk.Button(filters, text="Clear Filters", width=12, command=self.on_clear_filters).pack(side="left", padx=(8, 0))
 
         # Treeview for history
         tree_frame = ttk.Frame(history_card)
         tree_frame.pack(fill="both", expand=True)
-        cols = ("ts", "type", "feature_key", "environment", "enabled", "transport", "ok", "user", "ticket")
+        cols = ("ts", "type", "feature_key", "environment", "enabled", "transport", "ok", "user", "ticket", "summary")
         self.history_tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=12)
         col_defs = (
             ("ts", "Time", 180),
@@ -107,6 +121,7 @@ class NotificationsTab:
             ("ok", "OK", 50),
             ("user", "User", 120),
             ("ticket", "Ticket", 140),
+            ("summary", "Summary", 320),
         )
         # Store base labels for sort indicator toggling
         self._col_labels = {c: t for c, t, _ in col_defs}
@@ -254,6 +269,8 @@ class NotificationsTab:
                 self.history_tree.delete(iid)
             # Populate
             for idx, e in enumerate(entries):
+                # Derive a concise summary if not provided in the audit payload
+                summary = self._build_summary(e)
                 values = (
                     e.get("ts", ""),
                     e.get("type", ""),
@@ -264,12 +281,40 @@ class NotificationsTab:
                     "True" if e.get("ok", True) else "False",
                     e.get("user", ""),
                     e.get("ticket", ""),
+                    summary,
                 )
                 self.history_tree.insert("", "end", iid=str(idx), values=values)
             # Store for selection lookup
             self._history_cache = entries
         except Exception:
             pass
+
+    def _build_summary(self, e: dict) -> str:
+        """Create a concise one-line summary for the history grid."""
+        try:
+            # Prefer explicit summary if present
+            s = str(e.get("summary", "")).strip()
+            if s:
+                return s
+            etype = str(e.get("type", "")).strip()
+            enabled_val = e.get("enabled")
+            if etype == "pmc_targeting_update":
+                pmc = str(e.get("pmc_id", "")).strip()
+                action = "enabled" if enabled_val else "disabled"
+                return f"PMC {pmc} {action}"
+            if etype == "default_rule_update":
+                if enabled_val is True:
+                    return "Default rule set to True"
+                if enabled_val is False:
+                    return "Default rule set to False"
+                return "Default rule updated"
+            if etype == "feature_flag_change":
+                return f"Toggled {'ON' if enabled_val else 'OFF'}"
+            if etype == "update_flag":
+                return f"Update flag enabled={'True' if enabled_val else 'False'}"
+            return ""
+        except Exception:
+            return ""
 
     def on_refresh_history(self, *_):
         entries = self._load_history()
