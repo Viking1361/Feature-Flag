@@ -35,6 +35,9 @@ class LoginWindow:
         self.master.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
         
         self.master.resizable(True, True)  # Enable resizing for the login window
+        # Guards to prevent duplicate auth and duplicate app launch
+        self._auth_in_progress = False
+        self._app_launched = False
 
         # Use a frame to group and center the login widgets
         login_frame = ttk.Frame(master, padding="20")
@@ -129,8 +132,8 @@ class LoginWindow:
         self.password_entry.pack(pady=5, fill='x', padx=5)
         
         # Login button
-        login_btn = ttk.Button(login_frame, text="Login", command=self.check_login, bootstyle="primary", width=15)
-        login_btn.pack(pady=20)
+        self.login_btn = ttk.Button(login_frame, text="Login", command=self.check_login, bootstyle="primary", width=15)
+        self.login_btn.pack(pady=20)
         
         # Set focus and keyboard bindings for better UX
         if system_username:
@@ -146,6 +149,9 @@ class LoginWindow:
         self.password_entry.bind('<Return>', self.check_login)
 
     def check_login(self, event=None):
+        # Reentrancy guard: ignore if an authentication is already in progress
+        if getattr(self, '_auth_in_progress', False):
+            return
         # Check if widgets still exist before accessing them
         try:
             if (not hasattr(self, 'username_entry') or not self.username_entry.winfo_exists() or
@@ -157,6 +163,8 @@ class LoginWindow:
             password = self.password_entry.get()
             
             if not username or not password:
+                # Clear guard so user can try again
+                self._auth_in_progress = False
                 messagebox.showerror("Login Failed", "Please enter both username and password")
                 return
         except tk.TclError as e:
@@ -164,6 +172,12 @@ class LoginWindow:
             return
 
         # Show loader immediately while authenticating
+        self._auth_in_progress = True
+        try:
+            if hasattr(self, 'login_btn') and self.login_btn and self.login_btn.winfo_exists():
+                self.login_btn.configure(state="disabled")
+        except Exception:
+            pass
         self.show_startup_loader("Signing in...")
         try:
             self.master.update_idletasks()
@@ -203,9 +217,9 @@ class LoginWindow:
         threading.Thread(target=auth_and_continue, daemon=True).start()
 
     def _on_auth_complete(self, username: str, valid_login: bool, login_method: str, user_role: str):
-        if valid_login:
-            self.on_login_success(username, login_method, user_role)
-        else:
+        # Clear in-progress state and re-enable login for failures
+        if not valid_login:
+            self._auth_in_progress = False
             # Hide loader then show error
             self.hide_startup_loader()
             windows_auth_available = platform.system() == "Windows" and wintypes is not None
@@ -222,7 +236,19 @@ class LoginWindow:
                     error_msg = ("Login Failed!\n\n👤 User Access: Use Windows credentials\n\n" + admin_hint)
                 else:
                     error_msg = ("Login Failed!\n\n" + admin_hint)
+            try:
+                # Re-enable login button for retry
+                if hasattr(self, 'login_btn') and self.login_btn and self.login_btn.winfo_exists():
+                    self.login_btn.configure(state="normal")
+            except Exception:
+                pass
             messagebox.showerror("Login Failed", error_msg)
+        else:
+            # Prevent duplicate app launch if auth completes twice (e.g., double Enter)
+            if getattr(self, '_app_launched', False):
+                return
+            self._app_launched = True
+            self.on_login_success(username, login_method, user_role)
 
     def show_startup_loader(self, message: str = "Loading..."):
         """Display an inline overlay loader to avoid window flicker"""

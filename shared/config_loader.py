@@ -41,6 +41,12 @@ TEAMS_CHANNEL_EMAIL = os.environ.get("TEAMS_CHANNEL_EMAIL", "")
 TEAMS_DRY_RUN = os.environ.get("TEAMS_DRY_RUN", "false")
 TEAMS_DRY_RUN_WEBHOOK = os.environ.get("TEAMS_DRY_RUN_WEBHOOK", "")
 TEAMS_DRY_RUN_FILE = os.environ.get("TEAMS_DRY_RUN_FILE", "teams_dry_run.jsonl")
+# Daily summary popup configuration
+DAILY_SUMMARY_ENABLED = os.environ.get("DAILY_SUMMARY_ENABLED", "true")
+# Comma-separated list of event types to include (e.g., "update_flag,pmc_targeting_update"). Empty = include all (except reads)
+DAILY_SUMMARY_EVENT_TYPES = os.environ.get("DAILY_SUMMARY_EVENT_TYPES", "")
+# If true, include only ok==True entries
+DAILY_SUMMARY_OK_ONLY = os.environ.get("DAILY_SUMMARY_OK_ONLY", "false")
 
 # 2) Try to load optional root-level config.py without creating a hard import dependency
 try:
@@ -65,6 +71,9 @@ try:
         TEAMS_DRY_RUN = getattr(cfg, "TEAMS_DRY_RUN", TEAMS_DRY_RUN)
         TEAMS_DRY_RUN_WEBHOOK = getattr(cfg, "TEAMS_DRY_RUN_WEBHOOK", TEAMS_DRY_RUN_WEBHOOK)
         TEAMS_DRY_RUN_FILE = getattr(cfg, "TEAMS_DRY_RUN_FILE", TEAMS_DRY_RUN_FILE)
+        DAILY_SUMMARY_ENABLED = getattr(cfg, "DAILY_SUMMARY_ENABLED", DAILY_SUMMARY_ENABLED)
+        DAILY_SUMMARY_EVENT_TYPES = getattr(cfg, "DAILY_SUMMARY_EVENT_TYPES", DAILY_SUMMARY_EVENT_TYPES)
+        DAILY_SUMMARY_OK_ONLY = getattr(cfg, "DAILY_SUMMARY_OK_ONLY", DAILY_SUMMARY_OK_ONLY)
 except Exception:
     # Safe fallback if config.py isn't available
     pass
@@ -109,6 +118,9 @@ try:
                     TEAMS_DRY_RUN = getattr(cfg_local, "TEAMS_DRY_RUN", TEAMS_DRY_RUN)
                     TEAMS_DRY_RUN_WEBHOOK = getattr(cfg_local, "TEAMS_DRY_RUN_WEBHOOK", TEAMS_DRY_RUN_WEBHOOK)
                     TEAMS_DRY_RUN_FILE = getattr(cfg_local, "TEAMS_DRY_RUN_FILE", TEAMS_DRY_RUN_FILE)
+                    DAILY_SUMMARY_ENABLED = getattr(cfg_local, "DAILY_SUMMARY_ENABLED", DAILY_SUMMARY_ENABLED)
+                    DAILY_SUMMARY_EVENT_TYPES = getattr(cfg_local, "DAILY_SUMMARY_EVENT_TYPES", DAILY_SUMMARY_EVENT_TYPES)
+                    DAILY_SUMMARY_OK_ONLY = getattr(cfg_local, "DAILY_SUMMARY_OK_ONLY", DAILY_SUMMARY_OK_ONLY)
                     break
         except Exception:
             continue
@@ -169,6 +181,9 @@ try:
                 TEAMS_DRY_RUN = data.get("TEAMS_DRY_RUN", TEAMS_DRY_RUN)
                 TEAMS_DRY_RUN_WEBHOOK = data.get("TEAMS_DRY_RUN_WEBHOOK", TEAMS_DRY_RUN_WEBHOOK)
                 TEAMS_DRY_RUN_FILE = data.get("TEAMS_DRY_RUN_FILE", TEAMS_DRY_RUN_FILE)
+                DAILY_SUMMARY_ENABLED = data.get("DAILY_SUMMARY_ENABLED", DAILY_SUMMARY_ENABLED)
+                DAILY_SUMMARY_EVENT_TYPES = data.get("DAILY_SUMMARY_EVENT_TYPES", DAILY_SUMMARY_EVENT_TYPES)
+                DAILY_SUMMARY_OK_ONLY = data.get("DAILY_SUMMARY_OK_ONLY", DAILY_SUMMARY_OK_ONLY)
                 break
         except Exception:
             # Ignore JSON errors and try the next candidate
@@ -259,6 +274,16 @@ try:
 except Exception:
     TEAMS_DRY_RUN = False
 
+try:
+    DAILY_SUMMARY_ENABLED = str(DAILY_SUMMARY_ENABLED).strip().lower() in ("1", "true", "yes", "on")
+except Exception:
+    DAILY_SUMMARY_ENABLED = True
+
+try:
+    DAILY_SUMMARY_OK_ONLY = str(DAILY_SUMMARY_OK_ONLY).strip().lower() in ("1", "true", "yes", "on")
+except Exception:
+    DAILY_SUMMARY_OK_ONLY = False
+
 GRAPH_TENANT_ID = str(GRAPH_TENANT_ID) if 'GRAPH_TENANT_ID' in globals() and GRAPH_TENANT_ID is not None else ""
 GRAPH_CLIENT_ID = str(GRAPH_CLIENT_ID) if 'GRAPH_CLIENT_ID' in globals() and GRAPH_CLIENT_ID is not None else ""
 GRAPH_CLIENT_SECRET = str(GRAPH_CLIENT_SECRET) if 'GRAPH_CLIENT_SECRET' in globals() and GRAPH_CLIENT_SECRET is not None else ""
@@ -268,3 +293,4 @@ TEAMS_CHANNEL_EMAIL = str(TEAMS_CHANNEL_EMAIL) if 'TEAMS_CHANNEL_EMAIL' in globa
 TEAMS_DRY_RUN_WEBHOOK = str(TEAMS_DRY_RUN_WEBHOOK) if 'TEAMS_DRY_RUN_WEBHOOK' in globals() and TEAMS_DRY_RUN_WEBHOOK is not None else ""
 TEAMS_DRY_RUN_FILE = str(TEAMS_DRY_RUN_FILE) if 'TEAMS_DRY_RUN_FILE' in globals() and TEAMS_DRY_RUN_FILE is not None else "teams_dry_run.jsonl"
 AUDIT_FILE = str(AUDIT_FILE) if 'AUDIT_FILE' in globals() and AUDIT_FILE is not None else "audit_events.jsonl"
+DAILY_SUMMARY_EVENT_TYPES = str(DAILY_SUMMARY_EVENT_TYPES) if 'DAILY_SUMMARY_EVENT_TYPES' in globals() and DAILY_SUMMARY_EVENT_TYPES is not None else ""

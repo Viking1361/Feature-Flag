@@ -4,10 +4,18 @@ from tkinter import messagebox
 import os
 import webbrowser
 import logging
+import json
+from datetime import datetime, timezone, timedelta
 
 from version import get_version_info, GITHUB_OWNER, GITHUB_REPO
 from utils.auto_updater import get_updater
-from shared.config_loader import LOG_FILE
+from shared.config_loader import (
+    LOG_FILE,
+    AUDIT_FILE,
+    DAILY_SUMMARY_ENABLED,
+    DAILY_SUMMARY_EVENT_TYPES,
+    DAILY_SUMMARY_OK_ONLY,
+)
 
 # Import utility managers
 from utils.theme_manager import ThemeManager
@@ -27,6 +35,8 @@ logger = logging.getLogger(__name__)
 class FeatureFlagApp:
     def __init__(self, root):
         self.root = root
+        # Guard to prevent duplicate daily summary popups
+        self._daily_summary_shown = False
         # Ensure logging is configured early so logs always show in Log Viewer
         try:
             if not logging.getLogger().handlers:
@@ -125,6 +135,7 @@ class FeatureFlagApp:
         help_btn = ttk.Menubutton(top_frame, text="Help", bootstyle="secondary")
         help_menu = tk.Menu(help_btn, tearoff=0)
         help_menu.add_command(label="Check for Updates", command=lambda: get_updater(self.root).manual_check_for_updates())
+        help_menu.add_command(label="Show Today's Summary", command=self.show_summary_for_today)
         help_menu.add_command(label="Documentation", command=self.open_documentation)
         help_menu.add_separator()
         help_menu.add_command(label="About", command=self.show_about_dialog)
@@ -144,11 +155,20 @@ class FeatureFlagApp:
         
         copyright_label = ttk.Label(
             bottom_frame, 
-            text="© 2024 Feature Flag Management System", 
+            text=" 2024 Feature Flag Management System", 
             font=("Segoe UI", 9),
             foreground=self.theme_manager.get_theme_config()["colors"]["text_secondary"]
         )
         copyright_label.pack(side="right")
+        
+        # End of UI setup
+        # Show a daily summary popup the first time the app is used today (if enabled)
+        try:
+            if DAILY_SUMMARY_ENABLED:
+                # Slight delay so the main window is drawn first
+                self.root.after(800, self.maybe_show_daily_summary)
+        except Exception:
+            pass
 
     def create_vertical_tabs(self, parent):
         """Create vertical tab layout"""
@@ -403,6 +423,316 @@ class FeatureFlagApp:
             foreground=colors["text"],
             background=colors["sidebar"]
         )
+
+    # --- Daily summary (first run of the day) ---
+    def maybe_show_daily_summary(self):
+        """If this is the first app use today, show a popup summarizing today's changes
+        based on the audit/notifications JSONL file.
+        """
+        try:
+            # Instance-level guard: if already shown in this process, skip
+            if getattr(self, "_daily_summary_shown", False):
+                return
+            self._daily_summary_shown = True
+            # Determine sentinel path next to the audit file
+            base_dir = os.path.dirname(os.path.abspath(AUDIT_FILE)) if AUDIT_FILE else os.getcwd()
+            sentinel = os.path.join(base_dir, "last_summary_date.txt")
+
+            today_local = datetime.now().date().isoformat()
+            # If already shown today, skip
+            try:
+                if os.path.exists(sentinel):
+                    with open(sentinel, "r", encoding="utf-8") as f:
+                        last = (f.read() or "").strip()
+                    if last == today_local:
+                        return
+            except Exception:
+                pass
+
+            # Build summary for yesterday's audit entries (show on first open today)
+            target_date = datetime.now().date() - timedelta(days=1)
+            summary_text, found_count = self._build_summary_for_date(target_date)
+            if summary_text is None:
+                # No audit file or no entries; still write sentinel to avoid repeated popups
+                try:
+                    with open(sentinel, "w", encoding="utf-8") as f:
+                        f.write(today_local)
+                except Exception:
+                    pass
+                return
+
+            # To avoid race where two after-calls run before sentinel is written,
+            # write the sentinel BEFORE showing the messagebox.
+            try:
+                with open(sentinel, "w", encoding="utf-8") as f:
+                    f.write(today_local)
+            except Exception:
+                pass
+
+            # Show popup only if we have relevant info (or always show with "No changes")
+            try:
+                messagebox.showinfo(
+                    "Daily Summary",
+                    summary_text,
+                    parent=self.root,
+                )
+            finally:
+                # Write sentinel so we don't show again today
+                try:
+                    with open(sentinel, "w", encoding="utf-8") as f:
+                        f.write(today_local)
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.debug(f"daily summary failed: {e}")
+
+    def _build_today_summary_text(self):
+        """Read AUDIT_FILE and build a human-friendly summary for today's changes.
+        Returns (text, count) or (None, 0) if not available.
+        """
+        try:
+            path = AUDIT_FILE
+            if not path or not os.path.exists(path):
+                return None, 0
+
+            # Load entries
+            entries = []
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = (line or "").strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        entries.append(obj)
+                    except Exception:
+                        continue
+
+            if not entries:
+                return None, 0
+
+            # Filter today's entries in local time
+            def _parse_ts(ts: str):
+                try:
+                    s = str(ts or "")
+                    if not s:
+                        return None
+                    if s.endswith("Z"):
+                        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+                    return datetime.fromisoformat(s)
+                except Exception:
+                    return None
+
+            today_date = datetime.now().date()
+            today_entries = []
+            for e in entries:
+                dt = _parse_ts(e.get("ts"))
+                if not dt:
+                    continue
+                try:
+                    local_dt = dt.astimezone()
+                except Exception:
+                    # dt may be naive; treat as UTC
+                    local_dt = dt.replace(tzinfo=timezone.utc).astimezone()
+                if local_dt.date() == today_date:
+                    today_entries.append((local_dt, e))
+
+            # Build counts and recent list
+            if not today_entries:
+                text = (
+                    f"No changes recorded today (as of {datetime.now().strftime('%H:%M')}).\n\n"
+                    f"Audit file: {os.path.abspath(path)}"
+                )
+                return text, 0
+
+            # Keep updates only (exclude read-only events)
+            exclude_types = {"get_flag"}
+            updates = [(dt, e) for dt, e in today_entries if str(e.get("type", "")) not in exclude_types]
+            # Apply configured event type filter, if set
+            try:
+                allowed = {t.strip() for t in str(DAILY_SUMMARY_EVENT_TYPES or "").split(",") if t.strip()}
+            except Exception:
+                allowed = set()
+            if allowed:
+                updates = [(dt, e) for dt, e in updates if str(e.get("type", "")) in allowed]
+            # Apply ok-only filter if enabled
+            if DAILY_SUMMARY_OK_ONLY:
+                updates = [(dt, e) for dt, e in updates if bool(e.get("ok", True))]
+
+            # Counts by type
+            counts = {}
+            for _, e in updates:
+                t = str(e.get("type", ""))
+                counts[t] = counts.get(t, 0) + 1
+
+            # Sort descending by time and take last 10
+            updates.sort(key=lambda x: x[0], reverse=True)
+            recent = updates[:10]
+
+            # Build lines
+            lines = []
+            for dt, e in recent:
+                hhmm = dt.strftime("%H:%M")
+                key = e.get("feature_key") or e.get("key") or ""
+                env = e.get("environment", "")
+                summary = self._summary_line(e)
+                if not summary:
+                    summary = str(e.get("summary", "")).strip()
+                if not summary:
+                    # fallback generic
+                    enabled = e.get("enabled")
+                    summary = f"{e.get('type','')} enabled={'True' if enabled else 'False'}"
+                lines.append(f"[{hhmm}] {key} {('@'+env) if env else ''} - {summary}")
+
+            # Counts lines
+            count_lines = [f"- {k}: {v}" for k, v in sorted(counts.items())]
+            total = sum(counts.values())
+            header = f"Daily changes summary for {today_date.isoformat()}\n\n"
+            body_counts = "Total updates: " + str(total) + ("\n" + "\n".join(count_lines) if count_lines else "")
+            body_recent = "\n\nRecent changes (latest 10):\n" + ("\n".join(lines) if lines else "- None")
+            footer = f"\n\nAudit file: {os.path.abspath(path)}"
+            return header + body_counts + body_recent + footer, total
+        except Exception as e:
+            logger.debug(f"build_today_summary_text failed: {e}")
+            return None, 0
+
+    def _build_summary_for_date(self, target_date):
+        """Build a human-friendly summary for the given local date (yyyy-mm-dd)."""
+        try:
+            path = AUDIT_FILE
+            if not path or not os.path.exists(path):
+                return None, 0
+
+            # Load entries
+            entries = []
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = (line or "").strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        entries.append(obj)
+                    except Exception:
+                        continue
+
+            if not entries:
+                return None, 0
+
+            def _parse_ts(ts: str):
+                try:
+                    s = str(ts or "")
+                    if not s:
+                        return None
+                    if s.endswith("Z"):
+                        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+                    return datetime.fromisoformat(s)
+                except Exception:
+                    return None
+
+            # Filter entries matching target_date in local time
+            selected = []
+            for e in entries:
+                dt = _parse_ts(e.get("ts"))
+                if not dt:
+                    continue
+                try:
+                    local_dt = dt.astimezone()
+                except Exception:
+                    local_dt = dt.replace(tzinfo=timezone.utc).astimezone()
+                if local_dt.date() == target_date:
+                    selected.append((local_dt, e))
+
+            if not selected:
+                text = (
+                    f"No changes recorded on {target_date.isoformat()} as of {datetime.now().strftime('%H:%M')}\n\n"
+                    f"Audit file: {os.path.abspath(path)}"
+                )
+                return text, 0
+
+            # Exclude read-only event types
+            exclude_types = {"get_flag"}
+            updates = [(dt, e) for dt, e in selected if str(e.get("type", "")) not in exclude_types]
+            # Apply configured event type filter, if set
+            try:
+                allowed = {t.strip() for t in str(DAILY_SUMMARY_EVENT_TYPES or "").split(",") if t.strip()}
+            except Exception:
+                allowed = set()
+            if allowed:
+                updates = [(dt, e) for dt, e in updates if str(e.get("type", "")) in allowed]
+            # Apply ok-only filter if enabled
+            if DAILY_SUMMARY_OK_ONLY:
+                updates = [(dt, e) for dt, e in updates if bool(e.get("ok", True))]
+
+            counts = {}
+            for _, e in updates:
+                t = str(e.get("type", ""))
+                counts[t] = counts.get(t, 0) + 1
+
+            updates.sort(key=lambda x: x[0], reverse=True)
+            recent = updates[:10]
+
+            lines = []
+            for dt, e in recent:
+                hhmm = dt.strftime("%H:%M")
+                key = e.get("feature_key") or e.get("key") or ""
+                env = e.get("environment", "")
+                summary = self._summary_line(e) or str(e.get("summary", "")).strip()
+                if not summary:
+                    enabled = e.get("enabled")
+                    summary = f"{e.get('type','')} enabled={'True' if enabled else 'False'}"
+                lines.append(f"[{hhmm}] {key} {('@'+env) if env else ''} - {summary}")
+
+            count_lines = [f"- {k}: {v}" for k, v in sorted(counts.items())]
+            total = sum(counts.values())
+            header = f"Daily changes summary for {target_date.isoformat()}\n\n"
+            body_counts = "Total updates: " + str(total) + ("\n" + "\n".join(count_lines) if count_lines else "")
+            body_recent = "\n\nRecent changes (latest 10):\n" + ("\n".join(lines) if lines else "- None")
+            footer = f"\n\nAudit file: {os.path.abspath(path)}"
+            return header + body_counts + body_recent + footer, total
+        except Exception as e:
+            logger.debug(f"build_summary_for_date failed: {e}")
+            return None, 0
+
+    def _summary_line(self, e: dict) -> str:
+        """Return a one-line summary for a single audit event (shared logic)."""
+        try:
+            etype = str(e.get("type", "")).strip()
+            enabled_val = e.get("enabled")
+            key = e.get("feature_key") or e.get("key") or ""
+            env = e.get("environment", "")
+            if etype == "pmc_targeting_update":
+                pmc = str(e.get("pmc_id", "")).strip()
+                action = "enabled" if enabled_val else "disabled"
+                return f"PMC {pmc} {action}"
+            if etype == "default_rule_update":
+                if enabled_val is True:
+                    return "Default rule set to True"
+                if enabled_val is False:
+                    return "Default rule set to False"
+                return "Default rule updated"
+            if etype == "feature_flag_change":
+                return f"Toggled {'ON' if enabled_val else 'OFF'}"
+            if etype == "update_flag":
+                return f"Update flag enabled={'True' if enabled_val else 'False'}"
+            if etype == "create_flag":
+                return "Created flag"
+            return ""
+        except Exception:
+            return ""
+
+    # --- Menu handler: Show Today's Summary ---
+    def show_summary_for_today(self):
+        try:
+            text, count = self._build_summary_for_date(datetime.now().date())
+            if not text:
+                text = "No changes recorded today."
+            messagebox.showinfo("Today's Summary", text, parent=self.root)
+        except Exception as e:
+            try:
+                messagebox.showinfo("Today's Summary", f"Unable to build summary: {e}", parent=self.root)
+            except Exception:
+                pass
 
     def get_current_tab(self):
         """Get the currently active tab"""
