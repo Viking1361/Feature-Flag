@@ -47,6 +47,8 @@ DAILY_SUMMARY_ENABLED = os.environ.get("DAILY_SUMMARY_ENABLED", "true")
 DAILY_SUMMARY_EVENT_TYPES = os.environ.get("DAILY_SUMMARY_EVENT_TYPES", "")
 # If true, include only ok==True entries
 DAILY_SUMMARY_OK_ONLY = os.environ.get("DAILY_SUMMARY_OK_ONLY", "false")
+# What's New popup after update
+WHATS_NEW_ON_UPDATE_ENABLED = os.environ.get("WHATS_NEW_ON_UPDATE_ENABLED", "true")
 
 # 2) Try to load optional root-level config.py without creating a hard import dependency
 try:
@@ -74,6 +76,7 @@ try:
         DAILY_SUMMARY_ENABLED = getattr(cfg, "DAILY_SUMMARY_ENABLED", DAILY_SUMMARY_ENABLED)
         DAILY_SUMMARY_EVENT_TYPES = getattr(cfg, "DAILY_SUMMARY_EVENT_TYPES", DAILY_SUMMARY_EVENT_TYPES)
         DAILY_SUMMARY_OK_ONLY = getattr(cfg, "DAILY_SUMMARY_OK_ONLY", DAILY_SUMMARY_OK_ONLY)
+        WHATS_NEW_ON_UPDATE_ENABLED = getattr(cfg, "WHATS_NEW_ON_UPDATE_ENABLED", WHATS_NEW_ON_UPDATE_ENABLED)
 except Exception:
     # Safe fallback if config.py isn't available
     pass
@@ -121,6 +124,7 @@ try:
                     DAILY_SUMMARY_ENABLED = getattr(cfg_local, "DAILY_SUMMARY_ENABLED", DAILY_SUMMARY_ENABLED)
                     DAILY_SUMMARY_EVENT_TYPES = getattr(cfg_local, "DAILY_SUMMARY_EVENT_TYPES", DAILY_SUMMARY_EVENT_TYPES)
                     DAILY_SUMMARY_OK_ONLY = getattr(cfg_local, "DAILY_SUMMARY_OK_ONLY", DAILY_SUMMARY_OK_ONLY)
+                    WHATS_NEW_ON_UPDATE_ENABLED = getattr(cfg_local, "WHATS_NEW_ON_UPDATE_ENABLED", WHATS_NEW_ON_UPDATE_ENABLED)
                     break
         except Exception:
             continue
@@ -184,6 +188,7 @@ try:
                 DAILY_SUMMARY_ENABLED = data.get("DAILY_SUMMARY_ENABLED", DAILY_SUMMARY_ENABLED)
                 DAILY_SUMMARY_EVENT_TYPES = data.get("DAILY_SUMMARY_EVENT_TYPES", DAILY_SUMMARY_EVENT_TYPES)
                 DAILY_SUMMARY_OK_ONLY = data.get("DAILY_SUMMARY_OK_ONLY", DAILY_SUMMARY_OK_ONLY)
+                WHATS_NEW_ON_UPDATE_ENABLED = data.get("WHATS_NEW_ON_UPDATE_ENABLED", WHATS_NEW_ON_UPDATE_ENABLED)
                 break
         except Exception:
             # Ignore JSON errors and try the next candidate
@@ -283,6 +288,11 @@ try:
     DAILY_SUMMARY_OK_ONLY = str(DAILY_SUMMARY_OK_ONLY).strip().lower() in ("1", "true", "yes", "on")
 except Exception:
     DAILY_SUMMARY_OK_ONLY = False
+
+try:
+    WHATS_NEW_ON_UPDATE_ENABLED = str(WHATS_NEW_ON_UPDATE_ENABLED).strip().lower() in ("1", "true", "yes", "on")
+except Exception:
+    WHATS_NEW_ON_UPDATE_ENABLED = True
 
 GRAPH_TENANT_ID = str(GRAPH_TENANT_ID) if 'GRAPH_TENANT_ID' in globals() and GRAPH_TENANT_ID is not None else ""
 GRAPH_CLIENT_ID = str(GRAPH_CLIENT_ID) if 'GRAPH_CLIENT_ID' in globals() and GRAPH_CLIENT_ID is not None else ""

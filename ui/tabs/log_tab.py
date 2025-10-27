@@ -3,12 +3,15 @@ import ttkbootstrap as ttk
 from tkinter import messagebox
 import os
 from shared.config_loader import LOG_FILE
+from ui.widgets.help_icon import HelpIcon
+from utils.settings_manager import SettingsManager
 
 class LogTab:
     def __init__(self, parent, history_manager, theme_manager):
         self.parent = parent
         self.history_manager = history_manager
         self.theme_manager = theme_manager
+        self._help_icons = []
         self.setup_ui()
 
     def setup_ui(self):
@@ -70,39 +73,57 @@ class LogTab:
         buttons_frame.pack(fill="x", pady=8)
         
         # Refresh button
+        refresh_group = ttk.Frame(buttons_frame)
+        refresh_group.pack(side="left", padx=(0, 10))
         refresh_button = ttk.Button(
-            buttons_frame, 
+            refresh_group, 
             text="🔄 Refresh Logs", 
             bootstyle="info", 
             width=15, 
             command=self.refresh_logs
         )
-        refresh_button.pack(side="left", padx=(0, 10))
+        refresh_button.pack(side="left")
+        _lh1 = HelpIcon(refresh_group, "log.refresh")
+        _lh1.pack(side="left", padx=(2,0))
+        self._help_icons.append((_lh1, {"side": "left", "padx": (2,0)}))
         
         # Clear logs button
+        clear_group = ttk.Frame(buttons_frame)
+        clear_group.pack(side="left", padx=10)
         clear_button = ttk.Button(
-            buttons_frame, 
+            clear_group, 
             text="🗑️ Clear Logs", 
             bootstyle="danger", 
             width=15, 
             command=self.clear_logs
         )
-        clear_button.pack(side="left", padx=10)
+        clear_button.pack(side="left")
+        _lh2 = HelpIcon(clear_group, "log.clear")
+        _lh2.pack(side="left", padx=(2,0))
+        self._help_icons.append((_lh2, {"side": "left", "padx": (2,0)}))
         
         # Export button
+        export_group = ttk.Frame(buttons_frame)
+        export_group.pack(side="left", padx=10)
         export_button = ttk.Button(
-            buttons_frame, 
+            export_group, 
             text="📤 Export Logs", 
             bootstyle="success", 
             width=15, 
             command=self.export_logs
         )
-        export_button.pack(side="left", padx=10)
+        export_button.pack(side="left")
+        _lh3 = HelpIcon(export_group, "log.export")
+        _lh3.pack(side="left", padx=(2,0))
+        self._help_icons.append((_lh3, {"side": "left", "padx": (2,0)}))
 
         # Filter controls row
         filter_frame = ttk.Frame(controls_content)
         filter_frame.pack(fill="x", pady=8)
         ttk.Label(filter_frame, text="Filter:", font=("Segoe UI", 10, "bold")).pack(side="left")
+        _lh4 = HelpIcon(filter_frame, "log.filter")
+        _lh4.pack(side="left", padx=(2,0))
+        self._help_icons.append((_lh4, {"side": "left", "padx": (2,0)}))
         self.filter_var = tk.StringVar(value="All")
         filter_combo = ttk.Combobox(
             filter_frame,
@@ -124,6 +145,9 @@ class LogTab:
         search_frame = ttk.Frame(controls_content)
         search_frame.pack(fill="x", pady=4)
         ttk.Label(search_frame, text="Search:", font=("Segoe UI", 10, "bold")).pack(side="left")
+        _lh5 = HelpIcon(search_frame, "log.search")
+        _lh5.pack(side="left", padx=(2,0))
+        self._help_icons.append((_lh5, {"side": "left", "padx": (2,0)}))
         self.search_var = tk.StringVar(value="")
         search_entry = ttk.Entry(search_frame, textvariable=self.search_var, width=30)
         search_entry.pack(side="left", padx=(10, 0))
@@ -203,6 +227,24 @@ class LogTab:
 
         # Load initial logs
         self.refresh_logs()
+        # Apply initial help icon visibility
+        try:
+            show = bool(SettingsManager().get("help", "show_help_icons"))
+        except Exception:
+            show = True
+        if not show:
+            self.set_help_icons_visible(False)
+
+    def set_help_icons_visible(self, show: bool):
+        try:
+            for icon, kwargs in getattr(self, "_help_icons", []):
+                if show:
+                    if not icon.winfo_ismapped():
+                        icon.pack(**kwargs)
+                else:
+                    icon.pack_forget()
+        except Exception:
+            pass
 
     def _line_passes_filter(self, line: str) -> bool:
         """Return True if a log line matches the selected filter."""

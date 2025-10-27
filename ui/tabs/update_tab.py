@@ -11,6 +11,8 @@ from api_config.api_endpoints import FeatureFlagEndpoints, APIHeaders, APIConfig
 from shared.constants import UPDATE_ENVIRONMENT_OPTIONS, ENVIRONMENT_MAPPINGS
 from api_client import get_client
 from shared.audit import audit_event
+from ui.widgets.help_icon import HelpIcon
+from utils.settings_manager import SettingsManager
 
 # Module logger for this UI module
 logger = logging.getLogger(__name__)
@@ -22,6 +24,7 @@ class UpdateTab:
         self.theme_manager = theme_manager
         # Initialize optimized API client
         self.api_client = get_client()
+        self._help_icons = []
         self.setup_ui()
 
     def setup_ui(self):
@@ -99,13 +102,18 @@ class UpdateTab:
         key_container = ttk.Frame(left_column, style="Content.TFrame", padding=10)
         key_container.pack(fill="x", pady=(0, 8))
         
+        key_hdr = ttk.Frame(key_container)
+        key_hdr.pack(fill="x")
         key_label = ttk.Label(
-            key_container, 
+            key_hdr, 
             text="🔑 Feature Flag Key", 
             font=("Segoe UI", 12, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        key_label.pack(anchor="w", pady=(0, 5))
+        key_label.pack(side="left", pady=(0, 5))
+        _uh1 = HelpIcon(key_hdr, "update.flag_key")
+        _uh1.pack(side="left", padx=(2,0))
+        self._help_icons.append((_uh1, {"side": "left", "padx": (2,0)}))
         
         self.update_key_var = tk.StringVar()
         self.update_key_var.trace_add("write", lambda *args: self.reset_log())
@@ -122,13 +130,18 @@ class UpdateTab:
         env_container = ttk.Frame(left_column, style="Content.TFrame", padding=10)
         env_container.pack(fill="x", pady=(0, 6))
         
+        env_hdr = ttk.Frame(env_container)
+        env_hdr.pack(fill="x")
         env_label = ttk.Label(
-            env_container, 
+            env_hdr, 
             text="🌍 Environment", 
             font=("Segoe UI", 12, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        env_label.pack(anchor="w", pady=(0, 5))
+        env_label.pack(side="left", pady=(0, 5))
+        _uh2 = HelpIcon(env_hdr, "update.environment")
+        _uh2.pack(side="left", padx=(2,0))
+        self._help_icons.append((_uh2, {"side": "left", "padx": (2,0)}))
         
         self.environment_entry = ttk.Combobox(
             env_container, 
@@ -162,13 +175,18 @@ class UpdateTab:
         pmcid_container = ttk.Frame(right_column, style="Content.TFrame", padding=10)
         pmcid_container.pack(fill="x", pady=(0, 8))
         
+        pmcid_hdr = ttk.Frame(pmcid_container)
+        pmcid_hdr.pack(fill="x")
         pmcid_label = ttk.Label(
-            pmcid_container, 
+            pmcid_hdr, 
             text="🏢 PMC ID (Optional)", 
             font=("Segoe UI", 12, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        pmcid_label.pack(anchor="w", pady=(0, 5))
+        pmcid_label.pack(side="left", pady=(0, 5))
+        _uh3 = HelpIcon(pmcid_hdr, "update.pmc_id")
+        _uh3.pack(side="left", padx=(2,0))
+        self._help_icons.append((_uh3, {"side": "left", "padx": (2,0)}))
         
         self.pmcid_var = tk.StringVar()
         self.pmcid_entry = ttk.Entry(
@@ -191,13 +209,18 @@ class UpdateTab:
         siteid_container = ttk.Frame(right_column, style="Content.TFrame", padding=10)
         siteid_container.pack(fill="x", pady=(0, 6))
         
+        siteid_hdr = ttk.Frame(siteid_container)
+        siteid_hdr.pack(fill="x")
         siteid_label = ttk.Label(
-            siteid_container, 
+            siteid_hdr, 
             text="🌍 Site ID (Optional)", 
             font=("Segoe UI", 12, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        siteid_label.pack(anchor="w", pady=(0, 5))
+        siteid_label.pack(side="left", pady=(0, 5))
+        _uh4 = HelpIcon(siteid_hdr, "update.site_id")
+        _uh4.pack(side="left", padx=(2,0))
+        self._help_icons.append((_uh4, {"side": "left", "padx": (2,0)}))
         
         self.siteid_var = tk.StringVar()
         self.siteid_entry = ttk.Entry(
@@ -238,45 +261,65 @@ class UpdateTab:
         self.fallthrough_option_combo.pack(anchor="w")
 
         # New: Allow applying default rule independently of ON/OFF
+        apply_group = ttk.Frame(options_container)
+        apply_group.pack(anchor="w", pady=(6, 0))
         self.apply_fallthrough_button = ttk.Button(
-            options_container,
+            apply_group,
             text="Apply Default Rule",
             bootstyle="info",
             width=20,
             command=self.apply_default_rule
         )
-        self.apply_fallthrough_button.pack(anchor="w", pady=(6, 0))
+        self.apply_fallthrough_button.pack(side="left")
+        _uh5 = HelpIcon(apply_group, "update.apply_default")
+        _uh5.pack(side="left", padx=(2,0))
+        self._help_icons.append((_uh5, {"side": "left", "padx": (2,0)}))
 
         # Centered button layout
         button_container = ttk.Frame(action_frame)
         button_container.pack(expand=True)
 
+        on_group = ttk.Frame(button_container)
+        on_group.pack(side="left", padx=(0, 15))
         self.update_on_button = ttk.Button(
-            button_container, 
+            on_group, 
             text="🟢 Turn ON", 
             bootstyle="success", 
             width=18,
             command=lambda: self.toggle_feature_flag(True)
         )
-        self.update_on_button.pack(side="left", padx=(0, 15))
+        self.update_on_button.pack(side="left")
+        _uh6 = HelpIcon(on_group, "update.turn_on")
+        _uh6.pack(side="left", padx=(2,0))
+        self._help_icons.append((_uh6, {"side": "left", "padx": (2,0)}))
 
+        off_group = ttk.Frame(button_container)
+        off_group.pack(side="left", padx=(0, 15))
         self.update_off_button = ttk.Button(
-            button_container, 
+            off_group, 
             text="🔴 Turn OFF", 
             bootstyle="danger", 
             width=18,
             command=lambda: self.toggle_feature_flag(False)
         )
-        self.update_off_button.pack(side="left", padx=(0, 15))
+        self.update_off_button.pack(side="left")
+        _uh7 = HelpIcon(off_group, "update.turn_off")
+        _uh7.pack(side="left", padx=(2,0))
+        self._help_icons.append((_uh7, {"side": "left", "padx": (2,0)}))
 
+        reset_group = ttk.Frame(button_container)
+        reset_group.pack(side="left")
         reset_button = ttk.Button(
-            button_container, 
+            reset_group, 
             text="🔄 Reset", 
             bootstyle="secondary", 
             width=15,
             command=self.reset_update_fields
         )
         reset_button.pack(side="left")
+        _uh8 = HelpIcon(reset_group, "update.reset")
+        _uh8.pack(side="left", padx=(2,0))
+        self._help_icons.append((_uh8, {"side": "left", "padx": (2,0)}))
 
         # === TWO-COLUMN LAYOUT: STATUS & API RESPONSE ===
         columns_container = ttk.Frame(content_container)
@@ -385,7 +428,13 @@ class UpdateTab:
         self.response_text.pack(side="left", fill="both", expand=True)
         response_scrollbar.pack(side="right", fill="y")
 
-
+        # Apply initial help icon visibility
+        try:
+            show = bool(SettingsManager().get("help", "show_help_icons"))
+        except Exception:
+            show = True
+        if not show:
+            self.set_help_icons_visible(False)
 
     # --- Event Handlers ---
     def toggle_feature_flag(self, enable):
@@ -561,6 +610,17 @@ class UpdateTab:
         self.loading_frame.pack_forget()
         self.update_on_button.config(state="normal")
         self.update_off_button.config(state="normal")
+
+    def set_help_icons_visible(self, show: bool):
+        try:
+            for icon, kwargs in getattr(self, "_help_icons", []):
+                if show:
+                    if not icon.winfo_ismapped():
+                        icon.pack(**kwargs)
+                else:
+                    icon.pack_forget()
+        except Exception:
+            pass
 
     def apply_default_rule(self):
         """Apply only the default rule (fallthrough/offVariation) without toggling ON/OFF."""

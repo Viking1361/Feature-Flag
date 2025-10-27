@@ -25,6 +25,11 @@ class SettingsManager:
                 "default_environment": "All",
                 "default_status": "All",
                 "default_health": "All"
+            },
+            "help": {
+                "show_help_icons": True,
+                "help_anchor_mode": "attach",  # center | attach
+                "tooltip_enabled": True
             }
         }
         self.settings = self.load_settings()

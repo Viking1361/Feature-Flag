@@ -18,7 +18,7 @@ import tkinter as tk
 from tkinter import messagebox
 import logging
 
-from version import __version__, UPDATE_CHECK_URL, UPDATE_DOWNLOAD_URL, UPDATE_CHECK_INTERVAL
+from version import __version__, UPDATE_CHECK_URL, UPDATE_DOWNLOAD_URL, UPDATE_CHECK_INTERVAL, GITHUB_OWNER, GITHUB_REPO
 from shared.config_loader import GITHUB_TOKEN
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,9 @@ class AutoUpdater:
             "auto_check_enabled": True,
             "last_check": None,
             "skip_version": None,
-            "check_interval": UPDATE_CHECK_INTERVAL
+            "check_interval": UPDATE_CHECK_INTERVAL,
+            # Track last seen version to support What's New on first launch after update
+            "last_seen_version": None,
         }
         
         if self.settings_file.exists():
@@ -83,6 +85,37 @@ class AutoUpdater:
                 json.dump(self.settings, f, indent=2)
         except Exception as e:
             logger.error(f"Error saving update settings: {e}")
+    
+    def get_release_notes_for_version(self, version: str):
+        """Retrieve release notes for a given version tag from GitHub.
+        Returns a dict with keys: version, body, published_at. Returns None on failure.
+        """
+        try:
+            if not version:
+                return None
+            # Use GitHub API: releases/tags/v<version>
+            url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tags/v{version}"
+            headers = {"Accept": "application/vnd.github+json"}
+            use_auth = False
+            try:
+                from shared.config_loader import GITHUB_TOKEN
+                if GITHUB_TOKEN:
+                    headers["Authorization"] = f"token {GITHUB_TOKEN}"
+                    use_auth = True
+            except Exception:
+                pass
+            logger.info(f"Updater: GET {url} for release notes auth={use_auth}")
+            resp = requests.get(url, headers=headers, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            return {
+                "version": version,
+                "body": data.get("body", ""),
+                "published_at": data.get("published_at", ""),
+            }
+        except Exception as e:
+            logger.debug(f"get_release_notes_for_version failed: {e}")
+            return None
     
     def should_check_for_updates(self):
         """Check if it's time to check for updates"""

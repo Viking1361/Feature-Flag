@@ -726,6 +726,56 @@ class LaunchDarklyClient:
     def clear_cache(self):
         """Clear all cached data"""
         self.cache.clear()
+    
+    def get_audit_log_entries(
+        self,
+        project_key: Optional[str] = None,
+        env_key: Optional[str] = None,
+        limit: int = 20,
+        before: Optional[str] = None,
+        after: Optional[str] = None,
+        spec: Optional[str] = None,
+    ) -> List[Dict]:
+        """
+        Fetch LaunchDarkly audit log entries using the official /auditlog endpoint.
+
+        Uses the 'spec' query param for resource filtering (project/env/flag collection) when provided.
+        If 'spec' is not given and 'env_key' is provided, builds a collection spec for all flags in that environment.
+        Results are limited and returned as a list of entries (raw API items).
+        """
+        # LaunchDarkly enforces 1..20 for audit log 'limit'
+        try:
+            safe_limit = int(limit)
+        except Exception:
+            safe_limit = 20
+        if safe_limit < 1:
+            safe_limit = 1
+        if safe_limit > 20:
+            safe_limit = 20
+        params: Dict[str, Any] = {"limit": safe_limit}
+        if before:
+            params["before"] = str(before)
+        if after:
+            params["after"] = str(after)
+        # Prefer explicit spec if provided
+        if spec:
+            params["spec"] = spec
+        else:
+            proj = project_key or self.project_key
+            if env_key:
+                # Collection of all flags within a specific environment of a project
+                # Example per LD support doc: spec=my-project:env/my-env:flag/*
+                params["spec"] = f"proj/{proj}:env/{env_key}:flag/*"
+            else:
+                # No spec -> organization-wide; keep limit small
+                pass
+
+        response = self._make_request("GET", "/auditlog", params=params)
+        if response:
+            data = response.json() or {}
+            items = data.get("items", [])
+            return items if isinstance(items, list) else []
+        return []
 
 # Global instance
 _client_instance = None

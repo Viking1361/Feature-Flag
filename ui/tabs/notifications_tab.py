@@ -12,7 +12,8 @@ try:
     from shared.constants import READ_ENVIRONMENT_OPTIONS
 except Exception:
     READ_ENVIRONMENT_OPTIONS = ["DEV", "OCRT", "SAT", "PROD"]
- 
+from ui.widgets.help_icon import HelpIcon
+from utils.settings_manager import SettingsManager
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class NotificationsTab:
         # Default sort: newest first by timestamp
         self._sort_key = "ts"
         self._sort_reverse = True
+        self._help_icons = []
         self.setup_ui()
 
     def setup_ui(self):
@@ -75,18 +77,34 @@ class NotificationsTab:
         filters = ttk.Frame(history_card)
         filters.pack(fill="x", pady=(6, 6))
         ttk.Label(filters, text="Key:", font=("Segoe UI", 10), foreground=colors["text"]).pack(side="left")
+        _nh1 = HelpIcon(filters, "notifications.filters.key")
+        _nh1.pack(side="left", padx=(2,0))
+        self._help_icons.append((_nh1, {"side": "left", "padx": (2,0)}))
         self.filter_key_var = tk.StringVar()
         ttk.Entry(filters, textvariable=self.filter_key_var, width=24).pack(side="left", padx=(6, 12))
         ttk.Label(filters, text="Env:", font=("Segoe UI", 10), foreground=colors["text"]).pack(side="left")
+        _nh2 = HelpIcon(filters, "notifications.filters.env")
+        _nh2.pack(side="left", padx=(2,0))
+        self._help_icons.append((_nh2, {"side": "left", "padx": (2,0)}))
         self.filter_env_var = tk.StringVar(value="Any")
         env_opts = ["Any"] + READ_ENVIRONMENT_OPTIONS
         ttk.Combobox(filters, textvariable=self.filter_env_var, values=env_opts, state="readonly", width=10).pack(side="left", padx=(6, 12))
         ttk.Label(filters, text="Transport:", font=("Segoe UI", 10), foreground=colors["text"]).pack(side="left")
+        _nh3 = HelpIcon(filters, "notifications.filters.transport")
+        _nh3.pack(side="left", padx=(2,0))
+        self._help_icons.append((_nh3, {"side": "left", "padx": (2,0)}))
         self.filter_transport_var = tk.StringVar(value="Any")
         ttk.Combobox(filters, textvariable=self.filter_transport_var, values=["Any", "dry_run", "graph"], state="readonly", width=10).pack(side="left", padx=(6, 12))
         self.filter_ok_only = tk.BooleanVar(value=False)
-        ttk.Checkbutton(filters, text="OK only", variable=self.filter_ok_only, bootstyle="round-toggle").pack(side="left", padx=(4, 12))
+        ok_chk = ttk.Checkbutton(filters, text="OK only", variable=self.filter_ok_only, bootstyle="round-toggle")
+        ok_chk.pack(side="left", padx=(4, 12))
+        _nh4 = HelpIcon(filters, "notifications.filters.ok_only")
+        _nh4.pack(side="left", padx=(2,0))
+        self._help_icons.append((_nh4, {"side": "left", "padx": (2,0)}))
         ttk.Label(filters, text="Type:", font=("Segoe UI", 10), foreground=colors["text"]).pack(side="left", padx=(12, 0))
+        _nh5 = HelpIcon(filters, "notifications.filters.type")
+        _nh5.pack(side="left", padx=(2,0))
+        self._help_icons.append((_nh5, {"side": "left", "padx": (2,0)}))
         self.filter_type_var = tk.StringVar(value="Any")
         ttk.Combobox(
             filters,
@@ -103,8 +121,20 @@ class NotificationsTab:
             state="readonly",
             width=22,
         ).pack(side="left", padx=(6, 12))
-        ttk.Button(filters, text="Refresh", width=10, command=self.on_refresh_history).pack(side="left")
-        ttk.Button(filters, text="Clear Filters", width=12, command=self.on_clear_filters).pack(side="left", padx=(8, 0))
+
+        refresh_group = ttk.Frame(filters)
+        refresh_group.pack(side="left")
+        ttk.Button(refresh_group, text="Refresh", width=10, command=self.on_refresh_history).pack(side="left")
+        _nh6 = HelpIcon(refresh_group, "notifications.refresh")
+        _nh6.pack(side="left", padx=(2,0))
+        self._help_icons.append((_nh6, {"side": "left", "padx": (2,0)}))
+
+        clear_group = ttk.Frame(filters)
+        clear_group.pack(side="left", padx=(8, 0))
+        ttk.Button(clear_group, text="Clear Filters", width=12, command=self.on_clear_filters).pack(side="left")
+        _nh7 = HelpIcon(clear_group, "notifications.clear")
+        _nh7.pack(side="left", padx=(2,0))
+        self._help_icons.append((_nh7, {"side": "left", "padx": (2,0)}))
 
         # Treeview for history
         tree_frame = ttk.Frame(history_card)
@@ -137,8 +167,19 @@ class NotificationsTab:
         # Copy actions
         copy_row = ttk.Frame(history_card)
         copy_row.pack(fill="x", pady=(6, 0))
-        ttk.Button(copy_row, text="Copy HTML", width=14, command=self.on_copy_html).pack(side="left")
-        ttk.Button(copy_row, text="Copy JSON", width=14, command=self.on_copy_json).pack(side="left", padx=(8, 0))
+        copy_html_group = ttk.Frame(copy_row)
+        copy_html_group.pack(side="left")
+        ttk.Button(copy_html_group, text="Copy HTML", width=14, command=self.on_copy_html).pack(side="left")
+        _nh8 = HelpIcon(copy_html_group, "notifications.copy_html")
+        _nh8.pack(side="left", padx=(2,0))
+        self._help_icons.append((_nh8, {"side": "left", "padx": (2,0)}))
+
+        copy_json_group = ttk.Frame(copy_row)
+        copy_json_group.pack(side="left", padx=(8, 0))
+        ttk.Button(copy_json_group, text="Copy JSON", width=14, command=self.on_copy_json).pack(side="left")
+        _nh9 = HelpIcon(copy_json_group, "notifications.copy_json")
+        _nh9.pack(side="left", padx=(2,0))
+        self._help_icons.append((_nh9, {"side": "left", "padx": (2,0)}))
 
         # Preview area (read-only)
         preview_card = ttk.Frame(root, style="Content.TFrame", padding=10)
@@ -147,7 +188,12 @@ class NotificationsTab:
         # Preview toolbar actions
         preview_toolbar = ttk.Frame(preview_card)
         preview_toolbar.pack(anchor="w", pady=(4, 6))
-        ttk.Button(preview_toolbar, text="Copy Flag Name", width=16, command=self.on_copy_flag_name).pack(side="left")
+        copy_flag_group = ttk.Frame(preview_toolbar)
+        copy_flag_group.pack(side="left")
+        ttk.Button(copy_flag_group, text="Copy Flag Name", width=16, command=self.on_copy_flag_name).pack(side="left")
+        _nh10 = HelpIcon(copy_flag_group, "notifications.copy_flag_name")
+        _nh10.pack(side="left", padx=(2,0))
+        self._help_icons.append((_nh10, {"side": "left", "padx": (2,0)}))
         self.preview_text = tk.Text(
             preview_card,
             height=12,
@@ -167,6 +213,13 @@ class NotificationsTab:
             self.on_refresh_history()
         except Exception:
             pass
+        # Apply initial help icon visibility
+        try:
+            show = bool(SettingsManager().get("help", "show_help_icons"))
+        except Exception:
+            show = True
+        if not show:
+            self.set_help_icons_visible(False)
 
     def _update_preview(self, content: str):
         try:
@@ -386,6 +439,17 @@ class NotificationsTab:
             self.parent.clipboard_clear()
             self.parent.clipboard_append(data)
             messagebox.showinfo("Notifications", "JSON copied to clipboard.")
+        except Exception:
+            pass
+
+    def set_help_icons_visible(self, show: bool):
+        try:
+            for icon, kwargs in getattr(self, "_help_icons", []):
+                if show:
+                    if not icon.winfo_ismapped():
+                        icon.pack(**kwargs)
+                else:
+                    icon.pack_forget()
         except Exception:
             pass
 

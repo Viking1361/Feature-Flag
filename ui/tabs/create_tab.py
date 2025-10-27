@@ -9,6 +9,8 @@ from datetime import datetime
 from shared.config_loader import LAUNCHDARKLY_API_KEY, PROJECT_KEY
 from api_config.api_endpoints import FeatureFlagEndpoints, APIHeaders, APIConfig
 from shared.audit import audit_event
+from ui.widgets.help_icon import HelpIcon
+from utils.settings_manager import SettingsManager
 
 # Configure logging for create tab
 logger = logging.getLogger(__name__)
@@ -19,6 +21,7 @@ class CreateTab:
         self.parent = parent
         self.history_manager = history_manager
         self.theme_manager = theme_manager
+        self._help_icons = []
         self.setup_ui()
 
     def setup_ui(self):
@@ -87,13 +90,18 @@ class CreateTab:
         key_frame = ttk.Frame(left_column)
         key_frame.pack(fill="x", pady=6)
         
+        key_hdr = ttk.Frame(key_frame)
+        key_hdr.pack(fill="x")
         key_label = ttk.Label(
-            key_frame, 
+            key_hdr, 
             text="🔑 Flag Key", 
             font=("Segoe UI", 11, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        key_label.pack(anchor="w", pady=(0, 5))
+        key_label.pack(side="left", pady=(0, 5))
+        _ch1 = HelpIcon(key_hdr, "create.flag_key")
+        _ch1.pack(side="left", padx=(2,0))
+        self._help_icons.append((_ch1, {"side": "left", "padx": (2,0)}))
         
         self.create_key_var = tk.StringVar()
         self.create_key_entry = ttk.Entry(
@@ -107,13 +115,18 @@ class CreateTab:
         name_frame = ttk.Frame(left_column)
         name_frame.pack(fill="x", pady=6)
         
+        name_hdr = ttk.Frame(name_frame)
+        name_hdr.pack(fill="x")
         name_label = ttk.Label(
-            name_frame, 
+            name_hdr, 
             text="📋 Flag Name", 
             font=("Segoe UI", 11, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        name_label.pack(anchor="w", pady=(0, 5))
+        name_label.pack(side="left", pady=(0, 5))
+        _ch2 = HelpIcon(name_hdr, "create.flag_name")
+        _ch2.pack(side="left", padx=(2,0))
+        self._help_icons.append((_ch2, {"side": "left", "padx": (2,0)}))
         
         self.create_name_var = tk.StringVar()
         self.create_name_entry = ttk.Entry(
@@ -128,13 +141,18 @@ class CreateTab:
         desc_frame = ttk.Frame(right_column)
         desc_frame.pack(fill="x", pady=6)
         
+        desc_hdr = ttk.Frame(desc_frame)
+        desc_hdr.pack(fill="x")
         desc_label = ttk.Label(
-            desc_frame, 
+            desc_hdr, 
             text="📄 Description", 
             font=("Segoe UI", 11, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        desc_label.pack(anchor="w", pady=(0, 5))
+        desc_label.pack(side="left", pady=(0, 5))
+        _ch3 = HelpIcon(desc_hdr, "create.description")
+        _ch3.pack(side="left", padx=(2,0))
+        self._help_icons.append((_ch3, {"side": "left", "padx": (2,0)}))
         
         self.create_desc_var = tk.StringVar()
         self.create_desc_entry = ttk.Entry(
@@ -148,13 +166,18 @@ class CreateTab:
         tags_frame = ttk.Frame(right_column)
         tags_frame.pack(fill="x", pady=6)
         
+        tags_hdr = ttk.Frame(tags_frame)
+        tags_hdr.pack(fill="x")
         tags_label = ttk.Label(
-            tags_frame, 
+            tags_hdr, 
             text="🏷️ Tags", 
             font=("Segoe UI", 11, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        tags_label.pack(anchor="w", pady=(0, 5))
+        tags_label.pack(side="left", pady=(0, 5))
+        _ch4 = HelpIcon(tags_hdr, "create.tags")
+        _ch4.pack(side="left", padx=(2,0))
+        self._help_icons.append((_ch4, {"side": "left", "padx": (2,0)}))
         
         self.create_tags_var = tk.StringVar()
         self.create_tags_entry = ttk.Entry(
@@ -174,23 +197,33 @@ class CreateTab:
         buttons_frame = ttk.Frame(buttons_container)
         buttons_frame.pack(anchor="w")
         
+        create_group = ttk.Frame(buttons_frame)
+        create_group.pack(side="left", padx=(0, 10))
         self.create_button = ttk.Button(
-            buttons_frame, 
+            create_group, 
             text="🚀 Create Flag", 
             bootstyle="success", 
             width=15, 
             command=self.create_feature_flag
         )
-        self.create_button.pack(side="left", padx=(0, 10))
+        self.create_button.pack(side="left")
+        _ch5 = HelpIcon(create_group, "create.create_button")
+        _ch5.pack(side="left", padx=(2,0))
+        self._help_icons.append((_ch5, {"side": "left", "padx": (2,0)}))
 
+        reset_group = ttk.Frame(buttons_frame)
+        reset_group.pack(side="left")
         reset_create_button = ttk.Button(
-            buttons_frame, 
+            reset_group, 
             text="🔄 Reset Form", 
             bootstyle="secondary", 
             width=15, 
             command=self.reset_create_fields
         )
-        reset_create_button.pack(side="left", padx=10)
+        reset_create_button.pack(side="left")
+        _ch6 = HelpIcon(reset_group, "create.reset")
+        _ch6.pack(side="left", padx=(2,0))
+        self._help_icons.append((_ch6, {"side": "left", "padx": (2,0)}))
 
         # --- Status Section ---
         status_container = ttk.Frame(create_frame)
@@ -247,6 +280,13 @@ class CreateTab:
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
         self.create_result_label.pack(pady=6, fill="both", expand=True)
+        # Apply initial help icon visibility
+        try:
+            show = bool(SettingsManager().get("help", "show_help_icons"))
+        except Exception:
+            show = True
+        if not show:
+            self.set_help_icons_visible(False)
 
     # --- Event Handlers ---
     def create_feature_flag(self):
@@ -296,7 +336,6 @@ class CreateTab:
         logger.info("Validation passed, proceeding with flag creation")
 
         try:
-            # Create the feature flag using LaunchDarkly API
             logger.info("Calling create_flag_in_launchdarkly method")
 
             success, response_data = self.create_flag_in_launchdarkly(
@@ -399,6 +438,17 @@ class CreateTab:
         logger.info("Cleaning up UI after flag creation attempt")
         self.loading_frame.pack_forget()
         self.create_button.config(state="normal")
+
+    def set_help_icons_visible(self, show: bool):
+        try:
+            for icon, kwargs in getattr(self, "_help_icons", []):
+                if show:
+                    if not icon.winfo_ismapped():
+                        icon.pack(**kwargs)
+                else:
+                    icon.pack_forget()
+        except Exception:
+            pass
 
     def create_flag_in_launchdarkly(self, flag_key, flag_name, description, tags, environment):
         """Create a feature flag in LaunchDarkly using the API"""

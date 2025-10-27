@@ -15,11 +15,13 @@ from shared.config_loader import (
     DAILY_SUMMARY_ENABLED,
     DAILY_SUMMARY_EVENT_TYPES,
     DAILY_SUMMARY_OK_ONLY,
+    WHATS_NEW_ON_UPDATE_ENABLED,
 )
 
 # Import utility managers
 from utils.theme_manager import ThemeManager
 from utils.history_manager import HistoryManager
+from utils.settings_manager import SettingsManager
 
 # Import tab modules
 from ui.tabs.get_tab import GetTab
@@ -28,6 +30,7 @@ from ui.tabs.create_tab import CreateTab
 from ui.tabs.enhanced_view_tab import EnhancedViewTab as ViewTab
 from ui.tabs.notifications_tab import NotificationsTab
 from ui.tabs.log_tab import LogTab
+from ui.tabs.history_tab import HistoryTab
 
 # Module logger for this UI module
 logger = logging.getLogger(__name__)
@@ -37,6 +40,8 @@ class FeatureFlagApp:
         self.root = root
         # Guard to prevent duplicate daily summary popups
         self._daily_summary_shown = False
+        # Guard to prevent duplicate What's New popups
+        self._whats_new_shown = False
         # Ensure logging is configured early so logs always show in Log Viewer
         try:
             if not logging.getLogger().handlers:
@@ -65,6 +70,7 @@ class FeatureFlagApp:
         # Initialize managers
         self.theme_manager = ThemeManager()
         self.history_manager = HistoryManager()
+        self.settings_manager = SettingsManager()
         
         # Initialize theme
         self.current_theme = self.theme_manager.load_theme_preference()
@@ -136,7 +142,15 @@ class FeatureFlagApp:
         help_menu = tk.Menu(help_btn, tearoff=0)
         help_menu.add_command(label="Check for Updates", command=lambda: get_updater(self.root).manual_check_for_updates())
         help_menu.add_command(label="Show Today's Summary", command=self.show_summary_for_today)
+        help_menu.add_command(label="View What's New for Current Version", command=self.show_whats_new_current)
         help_menu.add_command(label="Documentation", command=self.open_documentation)
+        help_menu.add_separator()
+        try:
+            initial_show = bool(self.settings_manager.get("help", "show_help_icons"))
+        except Exception:
+            initial_show = True
+        self.help_icons_var = tk.BooleanVar(value=initial_show)
+        help_menu.add_checkbutton(label="Show Help Icons", variable=self.help_icons_var, command=self.on_toggle_help_icons)
         help_menu.add_separator()
         help_menu.add_command(label="About", command=self.show_about_dialog)
         help_btn["menu"] = help_menu
@@ -167,6 +181,12 @@ class FeatureFlagApp:
             if DAILY_SUMMARY_ENABLED:
                 # Slight delay so the main window is drawn first
                 self.root.after(800, self.maybe_show_daily_summary)
+        except Exception:
+            pass
+        # Show What's New after update (first launch on new version)
+        try:
+            if WHATS_NEW_ON_UPDATE_ENABLED:
+                self.root.after(1200, self.maybe_show_whats_new)
         except Exception:
             pass
 
@@ -277,6 +297,7 @@ class FeatureFlagApp:
             ("update", "Update Feature Flag", "⚙️", "update_flag"),
             ("create", "Create Feature Flag", "➕", "create_flag"),
             ("view", "🔒 Feature Flags List", "📊", "view_all_flags"),  # Admin only
+            ("history", "Flag History", "🕘", "get_flag"),
             ("notifications", "Notifications", "🔔", "get_flag"),
             ("log", "Log Viewer", "📝", "get_flag")  # Available to all
         ]
@@ -335,6 +356,14 @@ class FeatureFlagApp:
             self.tab_instances["log"] = LogTab(self.tab_frames["log"], self.history_manager, self.theme_manager)
         if "notifications" in available_tab_ids:
             self.tab_instances["notifications"] = NotificationsTab(self.tab_frames["notifications"], self.history_manager, self.theme_manager)
+        if "history" in available_tab_ids:
+            self.tab_instances["history"] = HistoryTab(self.tab_frames["history"], self.history_manager, self.theme_manager)
+
+        # Apply initial help icon visibility after tabs are created
+        try:
+            self.update_help_icons_visibility()
+        except Exception:
+            pass
 
         # Show default tab (first available tab)
         default_tab = available_tab_ids[0] if available_tab_ids else "get"
@@ -424,6 +453,33 @@ class FeatureFlagApp:
             background=colors["sidebar"]
         )
 
+    def on_toggle_help_icons(self):
+        try:
+            val = bool(self.help_icons_var.get())
+        except Exception:
+            val = True
+        try:
+            self.settings_manager.set("help", "show_help_icons", val)
+            self.settings_manager.save_settings()
+        except Exception:
+            pass
+        try:
+            self.update_help_icons_visibility()
+        except Exception:
+            pass
+
+    def update_help_icons_visibility(self):
+        try:
+            val = bool(self.help_icons_var.get())
+        except Exception:
+            val = True
+        try:
+            for tab in (self.tab_instances or {}).values():
+                if hasattr(tab, "set_help_icons_visible"):
+                    tab.set_help_icons_visible(val)
+        except Exception:
+            pass
+
     # --- Daily summary (first run of the day) ---
     def maybe_show_daily_summary(self):
         """If this is the first app use today, show a popup summarizing today's changes
@@ -485,6 +541,121 @@ class FeatureFlagApp:
                     pass
         except Exception as e:
             logger.debug(f"daily summary failed: {e}")
+
+    # --- What's New (first run after update) ---
+    def maybe_show_whats_new(self):
+        try:
+            if getattr(self, "_whats_new_shown", False):
+                return
+            self._whats_new_shown = True
+
+            if not WHATS_NEW_ON_UPDATE_ENABLED:
+                return
+
+            info = get_version_info()
+            current_ver = str(info.get("version", "")).strip()
+            if not current_ver:
+                return
+
+            updater = get_updater(self.root)
+            last_seen = (getattr(updater, "settings", {}) or {}).get("last_seen_version")
+            if last_seen == current_ver:
+                return
+
+            # Persist last seen before showing to avoid duplicate popups
+            try:
+                updater.settings["last_seen_version"] = current_ver
+                updater.save_settings()
+            except Exception:
+                pass
+
+            # Fetch release notes for current version
+            rn = None
+            try:
+                rn = updater.get_release_notes_for_version(current_ver)
+            except Exception:
+                rn = None
+
+            notes = (rn.get("body") if rn else "") or "No release notes available."
+            self._open_whats_new_dialog(current_ver, notes)
+
+        except Exception as e:
+            try:
+                logger.debug(f"whats new failed: {e}")
+            except Exception:
+                pass
+
+    def _open_whats_new_dialog(self, version: str, notes: str):
+        """Reusable dialog to show What's New for the given version."""
+        url = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/tag/v{version}"
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"What's New - v{version}")
+        dialog.geometry("560x420")
+        dialog.resizable(True, True)
+        dialog.transient(self.root)
+        try:
+            dialog.grab_set()
+        except Exception:
+            pass
+        # Center dialog
+        try:
+            dialog.update_idletasks()
+            x = (dialog.winfo_screenwidth() // 2) - (560 // 2)
+            y = (dialog.winfo_screenheight() // 2) - (420 // 2)
+            dialog.geometry(f"560x420+{x}+{y}")
+        except Exception:
+            pass
+
+        main = tk.Frame(dialog, padx=16, pady=16)
+        main.pack(fill="both", expand=True)
+
+        title = tk.Label(main, text=f"What's New in v{version}", font=("Segoe UI", 14, "bold"))
+        title.pack(anchor="w", pady=(0, 8))
+
+        notes_frame = tk.Frame(main)
+        notes_frame.pack(fill="both", expand=True)
+        txt = tk.Text(notes_frame, wrap="word", font=("Segoe UI", 10))
+        sb = tk.Scrollbar(notes_frame, orient="vertical", command=txt.yview)
+        txt.configure(yscrollcommand=sb.set)
+        txt.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        try:
+            txt.insert("1.0", notes)
+            txt.config(state="disabled")
+        except Exception:
+            pass
+
+        btns = tk.Frame(main)
+        btns.pack(fill="x", pady=(10, 0))
+
+        def open_release():
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+
+        link_btn = tk.Button(btns, text="Open Release Notes", command=open_release)
+        link_btn.pack(side="right", padx=(8, 0))
+        ok_btn = tk.Button(btns, text="OK", command=dialog.destroy)
+        ok_btn.pack(side="right")
+
+    def show_whats_new_current(self):
+        """Help menu action: View What's New for the current version on demand."""
+        try:
+            info = get_version_info()
+            current_ver = str(info.get("version", "")).strip()
+            if not current_ver:
+                return
+            updater = get_updater(self.root)
+            rn = updater.get_release_notes_for_version(current_ver)
+            notes = (rn.get("body") if rn else "") or "No release notes available."
+            self._open_whats_new_dialog(current_ver, notes)
+        except Exception as e:
+            try:
+                messagebox.showinfo("What's New", f"Unable to load release notes: {e}", parent=self.root)
+            except Exception:
+                pass
 
     def _build_today_summary_text(self):
         """Read AUDIT_FILE and build a human-friendly summary for today's changes.

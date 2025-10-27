@@ -16,6 +16,8 @@ from api_client import get_client
 import json
 import time
 from shared.audit import audit_event
+from ui.widgets.help_icon import HelpIcon
+from utils.settings_manager import SettingsManager
 
 # Module logger for this UI module
 logger = logging.getLogger(__name__)
@@ -31,6 +33,7 @@ class GetTab:
         self.last_flag_data = None
         # Track running animation jobs per canvas to allow cancellation
         self._anim_jobs = {}
+        self._help_icons = []
         self.setup_ui()
 
     def setup_ui(self):
@@ -133,14 +136,18 @@ class GetTab:
         # Feature Flag Key
         key_frame = ttk.Frame(left_column)
         key_frame.pack(fill="x", pady=8)
-        
+        key_hdr = ttk.Frame(key_frame)
+        key_hdr.pack(fill="x")
         key_label = ttk.Label(
-            key_frame, 
+            key_hdr, 
             text="🔑 Feature Flag Key", 
             font=("Segoe UI", 11, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        key_label.pack(anchor="w", pady=(0, 5))
+        key_label.pack(side="left", pady=(0, 5))
+        _h1 = HelpIcon(key_hdr, "get.flag_key")
+        _h1.pack(side="left", padx=(2,0))
+        self._help_icons.append((_h1, {"side": "left", "padx": (2,0)}))
         
         self.key_var = tk.StringVar()
         self.key_var.trace_add("write", self.on_input_data_change)
@@ -156,14 +163,18 @@ class GetTab:
         # Environment
         env_frame = ttk.Frame(left_column)
         env_frame.pack(fill="x", pady=8)
-        
+        env_hdr = ttk.Frame(env_frame)
+        env_hdr.pack(fill="x")
         env_label = ttk.Label(
-            env_frame, 
+            env_hdr, 
             text="🌍 Environment", 
             font=("Segoe UI", 11, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        env_label.pack(anchor="w", pady=(0, 5))
+        env_label.pack(side="left", pady=(0, 5))
+        _h2 = HelpIcon(env_hdr, "get.environment")
+        _h2.pack(side="left", padx=(2,0))
+        self._help_icons.append((_h2, {"side": "left", "padx": (2,0)}))
         
         self.env_var = tk.StringVar(value="DEV")
         self.env_entry = ttk.Combobox(
@@ -181,13 +192,18 @@ class GetTab:
         pmcid_frame = ttk.Frame(right_column)
         pmcid_frame.pack(fill="x", pady=8)
         
+        pmcid_hdr = ttk.Frame(pmcid_frame)
+        pmcid_hdr.pack(fill="x")
         pmcid_label = ttk.Label(
-            pmcid_frame, 
+            pmcid_hdr, 
             text="🏢 PMC ID (Optional)", 
             font=("Segoe UI", 11, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        pmcid_label.pack(anchor="w", pady=(0, 5))
+        pmcid_label.pack(side="left", pady=(0, 5))
+        _h3 = HelpIcon(pmcid_hdr, "get.pmc_id")
+        _h3.pack(side="left", padx=(2,0))
+        self._help_icons.append((_h3, {"side": "left", "padx": (2,0)}))
         
         self.pmcid_var = tk.StringVar()
         self.pmcid_entry = ttk.Entry(
@@ -210,13 +226,18 @@ class GetTab:
         siteid_frame = ttk.Frame(right_column)
         siteid_frame.pack(fill="x", pady=8)
         
+        siteid_hdr = ttk.Frame(siteid_frame)
+        siteid_hdr.pack(fill="x")
         siteid_label = ttk.Label(
-            siteid_frame, 
+            siteid_hdr, 
             text="🌍 Site ID (Optional)", 
             font=("Segoe UI", 11, "bold"),
             foreground=self.theme_manager.get_theme_config()["colors"]["text"]
         )
-        siteid_label.pack(anchor="w", pady=(0, 5))
+        siteid_label.pack(side="left", pady=(0, 5))
+        _h4 = HelpIcon(siteid_hdr, "get.site_id")
+        _h4.pack(side="left", padx=(2,0))
+        self._help_icons.append((_h4, {"side": "left", "padx": (2,0)}))
         
         self.siteid_var = tk.StringVar()
         self.siteid_entry = ttk.Entry(
@@ -247,23 +268,33 @@ class GetTab:
         button_container = ttk.Frame(action_frame)
         button_container.pack(expand=True)
         
+        submit_group = ttk.Frame(button_container)
+        submit_group.pack(side="left", padx=(0, 15))
         self.submit_button = ttk.Button(
-            button_container, 
+            submit_group, 
             text="🔍 Get Flag Status", 
             bootstyle="primary", 
             width=20,
             command=self.on_submit
         )
-        self.submit_button.pack(side="left", padx=(0, 15))
+        self.submit_button.pack(side="left")
+        _h5 = HelpIcon(submit_group, "get.get_button")
+        _h5.pack(side="left", padx=(2,0))
+        self._help_icons.append((_h5, {"side": "left", "padx": (2,0)}))
 
+        reset_group = ttk.Frame(button_container)
+        reset_group.pack(side="left", padx=(0, 15))
         reset_button = ttk.Button(
-            button_container, 
+            reset_group, 
             text="🔄 Reset", 
             bootstyle="secondary", 
             width=15,
             command=self.reset_get_fields
         )
-        reset_button.pack(side="left", padx=(0, 15))
+        reset_button.pack(side="left")
+        _h6 = HelpIcon(reset_group, "get.reset_button")
+        _h6.pack(side="left", padx=(2,0))
+        self._help_icons.append((_h6, {"side": "left", "padx": (2,0)}))
 
 
         # Make sure input canvas starts at natural height (expanded)
@@ -271,6 +302,13 @@ class GetTab:
             self.parent.after(0, self._sync_input_canvas_height_initial)
         except Exception:
             pass
+
+        try:
+            show = bool(SettingsManager().get("help", "show_help_icons"))
+        except Exception:
+            show = True
+        if not show:
+            self.set_help_icons_visible(False)
 
         # === TWO-COLUMN LAYOUT: FLAG STATUS & API RESPONSE ===
         # Quick summary banner (shown when input is collapsed)
@@ -1649,5 +1687,16 @@ class GetTab:
         self.pmcid_var.set("")
         self.siteid_var.set("")
         self.reset_response_fields() 
+
+    def set_help_icons_visible(self, show: bool):
+        try:
+            for icon, kwargs in getattr(self, "_help_icons", []):
+                if show:
+                    if not icon.winfo_ismapped():
+                        icon.pack(**kwargs)
+                else:
+                    icon.pack_forget()
+        except Exception:
+            pass
 
  
