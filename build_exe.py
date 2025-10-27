@@ -45,7 +45,6 @@ def build_executable():
         '--hidden-import=requests',
         '--hidden-import=tkinter',
         '--hidden-import=ttkbootstrap',
-        '--hidden-import=PIL',
         '--hidden-import=configparser',
         '--hidden-import=notifications.teams',
         '--hidden-import=json',
